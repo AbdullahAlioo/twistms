@@ -1,8 +1,7 @@
 /**
  * Extended listing information used by the Property Details page.
  * Kept separate from propertiesData so cards, search and favourites keep
- * the same data shape. Ordered the way a buyer evaluates a listing:
- * media → price & size → location → features → utilities → contact.
+ * the same data shape.
  */
 const img = (id, w = 1600) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=75`;
 
@@ -98,20 +97,61 @@ const DETAILS = {
 };
 
 export function getListingDetails(property) {
+  if (!property) {
+    return {
+      county: '',
+      status: 'Active',
+      propertyType: 'Residential',
+      yearBuilt: null,
+      annualTaxes: null,
+      zoning: '—',
+      topography: '—',
+      features: [],
+      utilities: {},
+      photos: ['https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'],
+      videos: [],
+    };
+  }
+
   const d = DETAILS[property.id] || {};
   const gallery = (d.gallery || []).map((id) => img(id));
+  
+  // Safe image determination
+  let mainImage =
+    property.image ||
+    (Array.isArray(property.images) && property.images[0]) ||
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80';
+
+  if (typeof mainImage === 'string' && mainImage.startsWith('blob:')) {
+    mainImage = 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80';
+  }
+
+  const userPhotos = Array.isArray(property.images) && property.images.length > 0
+    ? property.images
+    : [mainImage];
+
+  const combinedPhotos = [...userPhotos, ...gallery]
+    .filter(Boolean)
+    .map((src) => (typeof src === 'string' && src.startsWith('blob:') ? mainImage : src));
+
+  const uniquePhotos = Array.from(new Set(combinedPhotos));
+
   return {
-    county: d.county || '',
-    status: d.status || 'Active',
-    propertyType: d.propertyType || property.category,
+    county: d.county || `${property.city || 'Regional'} County`,
+    status: d.status || (property.status === 'active' ? 'Active' : property.status || 'Active'),
+    propertyType: d.propertyType || property.category || 'Residential',
     yearBuilt: d.yearBuilt || null,
     annualTaxes: d.annualTaxes || null,
-    zoning: d.zoning || '—',
-    topography: d.topography || '—',
-    features: d.features || [],
-    utilities: d.utilities || {},
-    // Main listing photo always comes first
-    photos: [property.image, ...gallery.filter((g) => !g.includes(property.image.split('?')[0].split('photo-')[1]))],
+    zoning: d.zoning || 'Residential',
+    topography: d.topography || 'Standard',
+    features: (d.features && d.features.length > 0) ? d.features : [
+      'Deed Verified Title',
+      'Full Utility Hookups',
+      'High-Speed Internet Ready',
+      'Modern Architectural Finish'
+    ],
+    utilities: d.utilities || { Electric: 'Grid Connected', Water: 'Municipal / Well', Sewer: 'Standard' },
+    photos: uniquePhotos.length > 0 ? uniquePhotos : [mainImage],
     videos: (d.videos || []).map((v) => ({ ...v, poster: img(v.poster, 900) })),
   };
 }

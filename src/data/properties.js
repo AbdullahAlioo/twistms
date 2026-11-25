@@ -175,15 +175,15 @@ export const listingPlans = [
   {
     name: "Free Listing",
     price: "$0",
-    period: "for 45 days",
-    description: "Ideal for individual owners testing the US marketplace.",
+    period: "for 90 days",
+    description: "Ideal for individual owners. Automatically erased after 90 days.",
     features: [
-      "45-Day Listing Duration",
+      "90-Day Listing Duration (Auto-erased after 90 days)",
+      "Seller Dashboard & Live Views Tracker",
       "5 to 100 HD Photos",
       "1 to 5 HD Videos",
-      "Public Search Display",
-      "Direct Buyer Inquiries",
-      "Standard Admin Review"
+      "Direct Buyer Lead Inbox",
+      "Instant Plan Activation (No Card Required)"
     ],
     highlight: false,
     badge: "Basic Entry"
@@ -191,15 +191,15 @@ export const listingPlans = [
   {
     name: "Paid Verified",
     price: "$49",
-    period: "for 150 days",
+    period: "for 180 days",
     description: "Enhanced exposure with verified badge and social promotion.",
     features: [
-      "150-Day Listing Duration",
+      "180-Day Listing Duration (6 Months)",
       "Verified Ownership Badge",
       "Prioritized Search Placement",
       "Up to 100 Photos + 5 Videos",
       "Official Social Media Spotlight",
-      "Lead Management Analytics"
+      "Full Lead Management Analytics"
     ],
     highlight: true,
     badge: "Most Popular"
@@ -210,7 +210,7 @@ export const listingPlans = [
     period: "for 365 days (1 Year)",
     description: "Full-year premier syndicate with multi-channel video distribution.",
     features: [
-      "365 Days Full Visibility",
+      "365 Days Full Year Visibility",
       "Top Homepage Featured Spot",
       "Dedicated Social Campaign (FB, IG, TikTok)",
       "Interactive 360 Tour Embeds",

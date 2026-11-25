@@ -15,15 +15,17 @@ import { isFinePointer, SPRING_SNAPPY } from '../../lib/motion';
 /**
  * Listing card, information-first:
  *   photo (status, save, photo count) → price | acreage → location → title → specs → action.
- * Keeps the favourite button, Verified badge, gentle 3D tilt and hover lift.
  */
 export default function PropertyCard({ property }) {
   const { toggleFavorite, isFavorite } = useFavorites();
-  const favorited = isFavorite(property.id);
+  const favorited = property?.id ? isFavorite(property.id) : false;
   const reduce = useReducedMotion();
   const cardRef = useRef(null);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [hovered, setHovered] = useState(false);
+
+  if (!property) return null;
+
   const info = getListingDetails(property);
 
   // Subtle tilt (motion values, no re-render per mouse move)
@@ -47,11 +49,23 @@ export default function PropertyCard({ property }) {
   };
 
   const href = `/property/${property.id}`;
+  const bedrooms = Number(property.bedrooms) || 0;
+  const bathrooms = Number(property.bathrooms) || 0;
+  const sqft = Number(property.sqft) || 0;
+  const acreage = Number(property.acreage) || 0;
+  const price = Number(property.price) || 0;
+  const stateCode = property.stateCode || property.state_code || 'TX';
+
   const specs = [
-    property.bedrooms > 0 && `${property.bedrooms} Beds`,
-    property.bathrooms > 0 && `${property.bathrooms} Baths`,
-    property.sqft > 0 && `${property.sqft.toLocaleString()} Sq Ft`,
+    bedrooms > 0 && `${bedrooms} Beds`,
+    bathrooms > 0 && `${bathrooms} Baths`,
+    sqft > 0 && `${sqft.toLocaleString()} Sq Ft`,
   ].filter(Boolean);
+
+  const mainImage =
+    property.image ||
+    (Array.isArray(property.images) && property.images[0]) ||
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80';
 
   return (
     <motion.article
@@ -76,8 +90,8 @@ export default function PropertyCard({ property }) {
       <Link to={href} className="relative block h-56 overflow-hidden bg-[#E8E8E8]" tabIndex={-1} aria-hidden="true">
         {!imgLoaded && <div className="absolute inset-0 skeleton-shimmer" />}
         <img
-          src={property.image}
-          alt=""
+          src={mainImage}
+          alt={property.title || 'Property'}
           loading="lazy"
           decoding="async"
           onLoad={() => setImgLoaded(true)}
@@ -93,7 +107,7 @@ export default function PropertyCard({ property }) {
             <span className="badge-featured px-2.5 py-1 text-[10px] font-extrabold tracking-[0.14em] uppercase rounded-md shadow">Featured</span>
           )}
           <span className="px-2.5 py-1 text-[10px] font-extrabold tracking-wider uppercase rounded-md bg-[#1C1C1C]/90 text-white shadow">
-            For {property.type}
+            For {property.type || 'Sale'}
           </span>
         </div>
 
@@ -104,7 +118,7 @@ export default function PropertyCard({ property }) {
             <circle cx="12" cy="13" r="3" strokeWidth="2" />
           </svg>
           {info.photos.length}
-          {info.videos.length > 0 && <span className="ml-1">· ▶ {info.videos.length}</span>}
+          {info.videos?.length > 0 && <span className="ml-1">· ▶ {info.videos.length}</span>}
         </span>
       </Link>
 
@@ -149,20 +163,24 @@ export default function PropertyCard({ property }) {
         {/* Price | Acreage */}
         <p className="flex flex-wrap items-baseline gap-x-2 text-[#111111]">
           <span className="text-xl font-extrabold font-editorial">
-            ${property.price.toLocaleString()}
-            {property.pricePeriod && <span className="text-xs font-semibold text-[#555555] ml-0.5">{property.pricePeriod}</span>}
+            ${price.toLocaleString()}
+            {(property.pricePeriod || property.price_period) && (
+              <span className="text-xs font-semibold text-[#555555] ml-0.5">
+                {property.pricePeriod || property.price_period}
+              </span>
+            )}
           </span>
-          {property.acreage > 0 && (
+          {acreage > 0 && (
             <>
               <span className="text-[#B4B4B4] font-bold" aria-hidden="true">|</span>
-              <span className="text-sm font-extrabold text-[#2B2B2B]">{property.acreage} Acres</span>
+              <span className="text-sm font-extrabold text-[#2B2B2B]">{acreage} Acres</span>
             </>
           )}
         </p>
 
         {/* Location */}
         <p className="mt-1 text-xs font-bold text-[#6E6E6E] uppercase tracking-wide">
-          {[info.county, property.stateCode].filter(Boolean).join(', ')}
+          {[info.county, stateCode].filter(Boolean).join(', ')}
         </p>
 
         {/* Title */}
@@ -171,29 +189,20 @@ export default function PropertyCard({ property }) {
             {property.title}
           </Link>
         </h3>
-        <p className="mt-1 text-xs text-[#555555] font-medium">{property.city}, {property.state} {property.zip}</p>
+        <p className="mt-1 text-xs text-[#555555] font-medium">
+          {property.city || ''}{property.city ? ', ' : ''}{property.state || ''} {property.zip || ''}
+        </p>
 
         {/* Specs */}
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <span className="px-2 py-1 rounded-md bg-[#EFEFEF]/70 text-[11px] font-bold text-[#2B2B2B]">{property.category}</span>
+          <span className="px-2 py-1 rounded-md bg-[#EFEFEF]/70 text-[11px] font-bold text-[#2B2B2B]">
+            {property.category || 'Residential'}
+          </span>
           {specs.map((sp) => (
-            <span key={sp} className="px-2 py-1 rounded-md bg-[#FAFAFA] border border-[#2B2B2B]/10 text-[11px] font-semibold text-[#111111]">{sp}</span>
-          ))}
-        </div>
-
-        {/* Action */}
-        <div className="mt-auto pt-4">
-          <div className="relative pt-3 border-t border-[#2B2B2B]/10 flex items-center justify-between text-xs">
-            <span
-              aria-hidden="true"
-              className={`absolute top-[-1px] left-0 h-px bg-[#B4B4B4] transition-[width] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${hovered ? 'w-full' : 'w-0'}`}
-            />
-            <span className="font-mono text-[10px] font-bold tracking-widest text-[#8A8A8A]">ID {property.id.toUpperCase()}</span>
-            <span className="inline-flex items-center gap-1.5 font-extrabold text-[#2B2B2B]">
-              View Property
-              <span className={`inline-block transition-transform duration-300 ${hovered ? 'translate-x-1' : ''}`} aria-hidden="true">→</span>
+            <span key={sp} className="px-2 py-1 rounded-md bg-[#FAFAFA] border border-[#2B2B2B]/10 text-[11px] font-semibold text-[#111111]">
+              {sp}
             </span>
-          </div>
+          ))}
         </div>
       </div>
     </motion.article>

@@ -1,30 +1,20 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import ScrollReveal from '../components/common/ScrollReveal';
 import MediaUploader from '../components/common/MediaUploader';
-import PaymentStep from '../components/common/PaymentStep';
 import { LISTING_RULES } from '../config/listingRules';
-
-// Paid plans go through checkout before the listing is submitted; Free skips it.
-const PAID_PLANS = {
-  Paid: {
-    name: 'Paid Verified',
-    price: 49,
-    days: 150,
-    perks: ['Verified Deed Badge', 'Prioritized search placement', 'Official FB & IG spotlight'],
-  },
-  Premium: {
-    name: 'Premium Elite',
-    price: 129,
-    days: 365,
-    perks: ['Top featured placement', 'Verified Deed Badge', 'TikTok & IG video push'],
-  },
-};
+import { useAuth } from '../context/AuthContext';
+import { createPropertyListing, convertFileToWebImage } from '../lib/supabase';
 
 export default function SubmitProperty() {
+  const { user, profile } = useAuth();
+  const [searchParams] = useSearchParams();
+  const queryPlan = searchParams.get('plan');
+
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
-  const [payment, setPayment] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [createdListing, setCreatedListing] = useState(null);
   const [refToken] = useState(() => `#TX-${Math.floor(1000 + Math.random() * 9000)}`);
   const [photos, setPhotos] = useState([]);
   const [videos, setVideos] = useState([]);
@@ -62,13 +52,30 @@ export default function SubmitProperty() {
     sqft: '',
     acreage: '',
     description: '',
-    plan: 'Paid',
+    locationUrl: '', // Google Maps link / pin
+    plan: 'Free', // Default to Free (90-day expiry rule)
     ownerName: '',
     ownerEmail: '',
     ownerPhone: '',
     hasDeed: true,
     hasTaxReceipt: true,
   });
+
+  // Pre-fill user data if authenticated or plan from URL
+  useEffect(() => {
+    if (queryPlan && ['Free', 'Paid', 'Premium'].includes(queryPlan)) {
+      setFormData((prev) => ({ ...prev, plan: queryPlan }));
+    }
+    if (user || profile) {
+      setFormData((prev) => ({
+        ...prev,
+        ownerName: prev.ownerName || profile?.full_name || '',
+        ownerEmail: prev.ownerEmail || user?.email || '',
+        ownerPhone: prev.ownerPhone || profile?.phone || '',
+        plan: queryPlan || prev.plan || profile?.current_plan || 'Free',
+      }));
+    }
+  }, [user, profile, queryPlan]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -78,22 +85,64 @@ export default function SubmitProperty() {
     }));
   };
 
-  const paidPlan = PAID_PLANS[formData.plan];
-
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (paidPlan) {
-      setStep(4);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    setSubmitted(true);
-  };
+    setSubmitting(true);
 
-  const handlePaid = (result) => {
-    setPayment(result);
-    setSubmitted(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      // Convert all uploaded photos into permanent universal web images (works on all phones)
+      const convertedImages = await Promise.all(
+        photos.map((p) => convertFileToWebImage(p, formData.category))
+      );
+
+      const imageUrls = convertedImages.filter(Boolean);
+      if (imageUrls.length === 0) {
+        imageUrls.push(
+          formData.category === 'Land'
+            ? 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80'
+            : formData.category === 'Commercial'
+            ? 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80'
+            : formData.category === 'Rental'
+            ? 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80'
+            : 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80'
+        );
+      }
+
+      const res = await createPropertyListing({
+        title: formData.title,
+        category: formData.category,
+        type: formData.type,
+        price: Number(formData.price) || 0,
+        address: formData.address,
+        city: formData.city,
+        state: formData.stateCode === 'TX' ? 'Texas' : formData.stateCode === 'CO' ? 'Colorado' : formData.stateCode === 'FL' ? 'Florida' : formData.stateCode === 'CA' ? 'California' : formData.stateCode === 'MT' ? 'Montana' : 'New York',
+        stateCode: formData.stateCode,
+        zip: formData.zip || '78701',
+        bedrooms: Number(formData.bedrooms) || 0,
+        bathrooms: Number(formData.bathrooms) || 0,
+        sqft: Number(formData.sqft) || 0,
+        acreage: Number(formData.acreage) || 0,
+        description: formData.description || 'Stunning luxury real estate with deed verification.',
+        locationUrl: formData.locationUrl || '',
+        plan: formData.plan,
+        images: imageUrls,
+        videos: videos.map((v) => v.name || 'video.mp4'),
+        ownerName: formData.ownerName,
+        ownerEmail: formData.ownerEmail,
+        ownerPhone: formData.ownerPhone,
+        hasDeed: formData.hasDeed,
+        hasTaxReceipt: formData.hasTaxReceipt,
+      }, user);
+
+      setCreatedListing(res.data);
+      setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      console.error(err);
+      alert('Error creating listing. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -103,13 +152,13 @@ export default function SubmitProperty() {
       <ScrollReveal direction="down">
         <div className="text-center space-y-2">
           <span className="text-[11px] font-mono uppercase tracking-widest text-[#6E6E6E] font-extrabold">
-            Administrative Deed Verification Portal
+            Seller Syndication & Deed Portal
           </span>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-[#111111] font-editorial">
-            Submit Property & Deed for Review
+            Submit Property & Choose Plan
           </h1>
           <p className="text-sm text-[#2B2B2B] max-w-xl mx-auto font-medium leading-relaxed">
-            All listings undergo administrative verification before entering public syndication. Complete the 3-step submission to obtain your Verified Deed badge.
+            All listings enter public syndication. Choose Free Plan for 90-day syndication, or pick Paid/Premium with zero checkout barrier.
           </p>
         </div>
       </ScrollReveal>
@@ -126,16 +175,8 @@ export default function SubmitProperty() {
           </div>
           <span className="text-[#6E6E6E] font-bold">→</span>
           <div className={`px-4 py-2 rounded-full border transition-all ${step === 3 ? 'bg-[#111111] text-white border-[#111111] font-bold shadow-md' : 'bg-white text-[#2B2B2B] border-[#2B2B2B]/25 font-semibold'}`}>
-            03. Syndication Tier
+            03. Syndication Tier & Instant Activation
           </div>
-          {paidPlan && (
-            <>
-              <span className="text-[#6E6E6E] font-bold">→</span>
-              <div className={`px-4 py-2 rounded-full border transition-all ${step === 4 ? 'bg-[#111111] text-white border-[#111111] font-bold shadow-md' : 'bg-white text-[#2B2B2B] border-[#2B2B2B]/25 font-semibold'}`}>
-                04. Payment
-              </div>
-            </>
-          )}
         </div>
       </ScrollReveal>
 
@@ -144,42 +185,51 @@ export default function SubmitProperty() {
         <div className="glass-panel-luxury p-8 sm:p-12 rounded-3xl border border-[#2B2B2B]/15 shadow-2xl bg-white">
           
           {submitted ? (
-            <div className="text-center py-12 space-y-5">
-              <div className="w-16 h-16 rounded-full bg-[#EAEAEA] text-[#2B2B2B] flex items-center justify-center mx-auto text-2xl font-bold font-editorial">
+            <div className="text-center py-12 space-y-6">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center mx-auto text-3xl font-bold font-editorial">
                 ✓
               </div>
               <h2 className="text-3xl font-extrabold text-[#111111] font-editorial">
-                Property Submitted for Administrative Review
+                Property Successfully Syndicated!
               </h2>
               <p className="text-xs text-[#2B2B2B] max-w-md mx-auto leading-relaxed font-medium">
-                Your submission for <span className="font-bold text-[#111111]">{formData.title || 'the submitted parcel'}</span> has been assigned reference token <span className="font-mono text-[#6E6E6E] font-bold">{refToken}</span>. Our compliance desk reviews deeds within 24 hours.
+                Your listing for <span className="font-bold text-[#111111]">{formData.title || 'the submitted parcel'}</span> has been activated under the <span className="font-bold text-[#111111]">{formData.plan} Plan</span> (Ref: <span className="font-mono text-[#6E6E6E] font-bold">{refToken}</span>).
               </p>
-              {payment && (
-                <div className="max-w-sm mx-auto rounded-2xl border border-[#2B2B2B]/15 bg-[#F6F6F6] p-4 text-left text-xs space-y-1.5">
-                  <p className="font-bold text-[#111111] flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true" />
-                    Payment confirmed
+
+              {formData.plan === 'Free' ? (
+                <div className="max-w-md mx-auto p-4 rounded-2xl bg-amber-50 border border-amber-200 text-left text-xs text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span>⏳</span> 90-Day Free Plan Duration Notice
                   </p>
-                  <div className="flex justify-between"><span className="text-[#555555]">Plan</span><span className="font-semibold text-[#111111]">{paidPlan?.name}</span></div>
-                  <div className="flex justify-between"><span className="text-[#555555]">Amount</span><span className="font-semibold text-[#111111]">${payment.amount.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span className="text-[#555555]">Card</span><span className="font-semibold text-[#111111]">{payment.brand} •••• {payment.last4}</span></div>
-                  <div className="flex justify-between"><span className="text-[#555555]">Receipt</span><span className="font-mono font-semibold text-[#111111]">{payment.receipt}</span></div>
+                  <p>
+                    This listing is scheduled to remain active for 90 days. It will automatically be erased and archived after 90 days unless upgraded.
+                  </p>
+                </div>
+              ) : (
+                <div className="max-w-md mx-auto p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-left text-xs text-emerald-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span>👑</span> {formData.plan} Plan Activated Instantly
+                  </p>
+                  <p>
+                    Your listing is verified and prioritized with extended syndication and social media spotlight!
+                  </p>
                 </div>
               )}
-              <div className="pt-4 flex justify-center gap-3">
-                <Link to="/search" className="btn-luxury px-6 py-3 rounded-xl text-xs font-bold">
-                  Back to Marketplace
+
+              <div className="pt-4 flex flex-wrap justify-center gap-3">
+                <Link to="/dashboard" className="btn-luxury px-6 py-3 rounded-xl text-xs font-bold shadow-md">
+                  Go to Seller Dashboard (Track Views & Leads)
                 </Link>
+                {createdListing && (
+                  <Link
+                    to={`/property/${createdListing.id}`}
+                    className="btn-luxury-outline px-6 py-3 rounded-xl text-xs font-bold"
+                  >
+                    View Public Post
+                  </Link>
+                )}
               </div>
             </div>
-          ) : step === 4 && paidPlan ? (
-            <PaymentStep
-              plan={paidPlan}
-              listingTitle={formData.title}
-              email={formData.ownerEmail}
-              onBack={() => setStep(3)}
-              onPaid={handlePaid}
-            />
           ) : (
             <form onSubmit={handleSubmit} className="space-y-8">
               
@@ -191,7 +241,7 @@ export default function SubmitProperty() {
                   </h3>
 
                   <div>
-                    <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Listing Headline / Title</label>
+                    <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Listing Headline / Title *</label>
                     <input
                       type="text"
                       name="title"
@@ -231,7 +281,7 @@ export default function SubmitProperty() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Asking Price ($ USD)</label>
+                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Asking Price ($ USD) *</label>
                       <input
                         type="number"
                         name="price"
@@ -246,7 +296,7 @@ export default function SubmitProperty() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="sm:col-span-2">
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Street Address</label>
+                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Street Address *</label>
                       <input
                         type="text"
                         name="address"
@@ -258,7 +308,7 @@ export default function SubmitProperty() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">City</label>
+                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">City *</label>
                       <input
                         type="text"
                         name="city"
@@ -336,6 +386,43 @@ export default function SubmitProperty() {
                     </div>
                   </div>
 
+                  {/* Google Maps Pin & Direct Directions URL */}
+                  <div>
+                    <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold flex flex-wrap items-center justify-between gap-1">
+                      <span>Google Maps Location Link / Map Pin URL</span>
+                      <span className="text-[10px] text-[#6E6E6E] font-normal normal-case">
+                        (Open Google Maps → Click "Share" → "Copy link")
+                      </span>
+                    </label>
+                    <input
+                      type="url"
+                      name="locationUrl"
+                      value={formData.locationUrl}
+                      onChange={handleChange}
+                      placeholder="e.g. https://maps.app.goo.gl/xyz123 or https://goo.gl/maps/..."
+                      className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
+                    />
+                    <p className="text-[10.5px] text-[#555555] mt-1 font-medium">
+                      Providing a Google Maps pin enables buyers to view the exact location and navigate directly using GPS directions.
+                    </p>
+                  </div>
+
+                  {/* Description / Architectural Highlights */}
+                  <div>
+                    <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">
+                      Property Overview & Description *
+                    </label>
+                    <textarea
+                      name="description"
+                      rows={4}
+                      required
+                      value={formData.description}
+                      onChange={handleChange}
+                      placeholder="Detail the parcel highlights, architectural qualities, topography, access roads, utilities, privacy, or deed status..."
+                      className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
+                    />
+                  </div>
+
                   <div className="pt-4 flex justify-end">
                     <button
                       type="button"
@@ -355,7 +442,6 @@ export default function SubmitProperty() {
                     Step 2: Legal Verification & Media Files
                   </h3>
 
-                  {/* Photos & videos with enforced listing limits */}
                   <p className="text-xs text-[#555555] font-medium -mt-2">
                     Add {PHOTO_LIMIT.min}–{PHOTO_LIMIT.max} photos and {VIDEO_LIMIT.min}–{VIDEO_LIMIT.max} videos. The first photo becomes the listing cover.
                   </p>
@@ -365,7 +451,7 @@ export default function SubmitProperty() {
                     <p role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-bold text-red-800">{mediaError}</p>
                   )}
 
-                  {/* Required Legal Attestation */}
+                  {/* Legal Attestation */}
                   <div className="p-5 rounded-2xl bg-[#EFEFEF]/60 border border-[#B4B4B4]/40 space-y-3">
                     <h4 className="text-xs font-bold text-[#111111] uppercase font-mono">
                       Administrative Compliance Checklist
@@ -412,87 +498,143 @@ export default function SubmitProperty() {
                 </div>
               )}
 
-              {/* STEP 3: Plan Selection & Submission */}
+              {/* STEP 3: Plan Selection & Instant Submission (NO PAYMENT GATEWAY) */}
               {step === 3 && (
                 <div className="space-y-6">
-                  <h3 className="text-xl font-bold text-[#111111] font-editorial border-b border-[#2B2B2B]/15 pb-3">
-                    Step 3: Select Listing Duration & Promotion Plan
-                  </h3>
+                  <div className="border-b border-[#2B2B2B]/15 pb-3">
+                    <h3 className="text-xl font-bold text-[#111111] font-editorial">
+                      Step 3: Select Plan & Launch Post
+                    </h3>
+                    <p className="text-xs text-[#555555] mt-1">
+                      Pick your syndication tier. No payment gateway or card needed — instantaneous post syndication.
+                    </p>
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Free Plan */}
                     <div
                       onClick={() => setFormData({ ...formData, plan: 'Free' })}
-                      className={`p-5 rounded-2xl border cursor-pointer transition-all ${
-                        formData.plan === 'Free' ? 'border-[#111111] bg-[#EFEFEF]/50 shadow-md ring-2 ring-[#111111]' : 'border-[#2B2B2B]/15 bg-white hover:border-[#2B2B2B]/40'
+                      className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                        formData.plan === 'Free' ? 'border-[#111111] bg-[#FAFAFA] shadow-md ring-1 ring-[#111111]' : 'border-[#2B2B2B]/15 bg-white hover:border-[#888888]'
                       }`}
                     >
-                      <span className="text-[10px] font-mono text-[#555555] uppercase font-bold">Basic Entry</span>
-                      <h4 className="text-lg font-bold text-[#111111] font-editorial">Free Listing</h4>
-                      <p className="text-xl font-extrabold font-editorial mt-1">$0 <span className="text-xs text-[#555555]">/ 45 days</span></p>
-                      <p className="text-[11px] text-[#2B2B2B] mt-2 font-medium">Standard public search display without social marketing.</p>
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-mono text-[#555555] uppercase font-bold">Standard Tier</span>
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${formData.plan === 'Free' ? 'border-[#111111] bg-[#111111]' : 'border-gray-300'}`}>
+                          {formData.plan === 'Free' && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        </span>
+                      </div>
+                      <h4 className="text-lg font-bold text-[#111111] font-editorial mt-1">Free Listing</h4>
+                      <p className="text-2xl font-extrabold font-editorial mt-1 text-[#111111]">$0</p>
+                      
+                      <div className="mt-3 pt-3 border-t border-[#2B2B2B]/10 space-y-1 text-[11px]">
+                        <p className="text-amber-700 font-bold flex items-center gap-1">
+                          <span>⏳</span> Erased after 90 days
+                        </p>
+                        <p className="text-[#555555]">Standard public syndication</p>
+                        <p className="text-[#555555]">Seller views tracking included</p>
+                      </div>
                     </div>
 
+                    {/* Paid Plan */}
                     <div
                       onClick={() => setFormData({ ...formData, plan: 'Paid' })}
-                      className={`p-5 rounded-2xl border cursor-pointer transition-all relative ${
-                        formData.plan === 'Paid' ? 'border-[#B4B4B4] bg-[#EFEFEF]/60 shadow-md ring-2 ring-[#B4B4B4]' : 'border-[#2B2B2B]/15 bg-white hover:border-[#2B2B2B]/40'
+                      className={`p-5 rounded-2xl border-2 cursor-pointer transition-all relative ${
+                        formData.plan === 'Paid' ? 'border-[#111111] bg-[#FAFAFA] shadow-md ring-1 ring-[#111111]' : 'border-[#2B2B2B]/15 bg-white hover:border-[#888888]'
                       }`}
                     >
-                      <span className="text-[10px] font-mono text-[#6E6E6E] uppercase font-extrabold">Most Popular</span>
-                      <h4 className="text-lg font-bold text-[#111111] font-editorial">Paid Verified</h4>
-                      <p className="text-xl font-extrabold font-editorial mt-1">$49 <span className="text-xs text-[#555555]">/ 150 days</span></p>
-                      <p className="text-[11px] text-[#2B2B2B] mt-2 font-medium">Includes Verified Deed Badge + Official FB & IG Spotlight.</p>
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-mono text-[#6E6E6E] uppercase font-extrabold">Verified</span>
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${formData.plan === 'Paid' ? 'border-[#111111] bg-[#111111]' : 'border-gray-300'}`}>
+                          {formData.plan === 'Paid' && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        </span>
+                      </div>
+                      <h4 className="text-lg font-bold text-[#111111] font-editorial mt-1">Paid Verified</h4>
+                      <p className="text-2xl font-extrabold font-editorial mt-1 text-[#111111]">$49</p>
+
+                      <div className="mt-3 pt-3 border-t border-[#2B2B2B]/10 space-y-1 text-[11px]">
+                        <p className="text-emerald-700 font-bold flex items-center gap-1">
+                          <span>✓</span> Active for 180 days (6 mo)
+                        </p>
+                        <p className="text-[#555555]">Verified Deed Badge</p>
+                        <p className="text-[#555555]">Prioritized search rankings</p>
+                      </div>
                     </div>
 
+                    {/* Premium Plan */}
                     <div
                       onClick={() => setFormData({ ...formData, plan: 'Premium' })}
-                      className={`p-5 rounded-2xl border cursor-pointer transition-all ${
-                        formData.plan === 'Premium' ? 'border-[#111111] bg-[#EFEFEF]/50 shadow-md ring-2 ring-[#111111]' : 'border-[#2B2B2B]/15 bg-white hover:border-[#2B2B2B]/40'
+                      className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
+                        formData.plan === 'Premium' ? 'border-[#111111] bg-[#FAFAFA] shadow-md ring-1 ring-[#111111]' : 'border-[#2B2B2B]/15 bg-white hover:border-[#888888]'
                       }`}
                     >
-                      <span className="text-[10px] font-mono text-[#555555] uppercase font-bold">Full Year</span>
-                      <h4 className="text-lg font-bold text-[#111111] font-editorial">Premium Elite</h4>
-                      <p className="text-xl font-extrabold font-editorial mt-1">$129 <span className="text-xs text-[#555555]">/ 365 days</span></p>
-                      <p className="text-[11px] text-[#2B2B2B] mt-2 font-medium">Top featured placement + viral TikTok/IG video push.</p>
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-mono text-[#555555] uppercase font-bold">Nationwide</span>
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${formData.plan === 'Premium' ? 'border-[#111111] bg-[#111111]' : 'border-gray-300'}`}>
+                          {formData.plan === 'Premium' && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                        </span>
+                      </div>
+                      <h4 className="text-lg font-bold text-[#111111] font-editorial mt-1">Premium Elite</h4>
+                      <p className="text-2xl font-extrabold font-editorial mt-1 text-[#111111]">$129</p>
+
+                      <div className="mt-3 pt-3 border-t border-[#2B2B2B]/10 space-y-1 text-[11px]">
+                        <p className="text-indigo-700 font-bold flex items-center gap-1">
+                          <span>👑</span> Active for 365 days (1 yr)
+                        </p>
+                        <p className="text-[#555555]">Top homepage hero banner</p>
+                        <p className="text-[#555555]">Social media campaign push</p>
+                      </div>
                     </div>
                   </div>
 
                   {/* Submitter Contact */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[#2B2B2B]/15">
+                  <div className="space-y-3 pt-4 border-t border-[#2B2B2B]/15">
                     <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Your Name</label>
-                      <input
-                        type="text"
-                        name="ownerName"
-                        required
-                        value={formData.ownerName}
-                        onChange={handleChange}
-                        placeholder="e.g. David Vance"
-                        className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
-                      />
+                      <h4 className="text-xs font-mono uppercase tracking-wider font-extrabold text-[#111111]">
+                        Direct Seller Contact Information
+                      </h4>
+                      <p className="text-[11px] text-[#555555]">
+                        Buyers will use these direct contact credentials to call, email, or chat with you on WhatsApp from your live listing.
+                      </p>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Email</label>
-                      <input
-                        type="email"
-                        name="ownerEmail"
-                        required
-                        value={formData.ownerEmail}
-                        onChange={handleChange}
-                        placeholder="david@domain.com"
-                        className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Phone / WhatsApp</label>
-                      <input
-                        type="tel"
-                        name="ownerPhone"
-                        value={formData.ownerPhone}
-                        onChange={handleChange}
-                        placeholder="+1 (555) 000-0000"
-                        className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
-                      />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Seller Full Name *</label>
+                        <input
+                          type="text"
+                          name="ownerName"
+                          required
+                          value={formData.ownerName}
+                          onChange={handleChange}
+                          placeholder="e.g. David Vance"
+                          className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Seller Email Address *</label>
+                        <input
+                          type="email"
+                          name="ownerEmail"
+                          required
+                          value={formData.ownerEmail}
+                          onChange={handleChange}
+                          placeholder="david@domain.com"
+                          className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">Seller Phone / WhatsApp *</label>
+                        <input
+                          type="tel"
+                          name="ownerPhone"
+                          required
+                          value={formData.ownerPhone}
+                          onChange={handleChange}
+                          placeholder="+1 (512) 555-0199"
+                          className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -506,9 +648,10 @@ export default function SubmitProperty() {
                     </button>
                     <button
                       type="submit"
-                      className="btn-luxury px-8 py-3.5 rounded-xl text-xs font-bold"
+                      disabled={submitting}
+                      className="btn-luxury px-8 py-3.5 rounded-xl text-xs font-bold shadow-lg flex items-center gap-2 cursor-pointer"
                     >
-                      {paidPlan ? `Continue to Payment · $${paidPlan.price} →` : 'Submit Free Listing →'}
+                      {submitting ? 'Publishing Listing...' : `Publish Listing on ${formData.plan} Plan →`}
                     </button>
                   </div>
                 </div>

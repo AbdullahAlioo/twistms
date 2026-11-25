@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { propertiesData } from '../data/properties';
+import { getActiveProperties } from '../lib/supabase';
 import PropertyCard from '../components/common/PropertyCard';
 import InteractiveMapView from '../components/common/InteractiveMapView';
 import ScrollReveal from '../components/common/ScrollReveal';
@@ -24,19 +25,44 @@ export default function Search() {
   const [typeFilter, setTypeFilter] = useState('All');
   const [priceSort, setPriceSort] = useState('default');
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'map'
+  const [allProperties, setAllProperties] = useState(propertiesData);
+
+  useEffect(() => {
+    async function loadProps() {
+      const active = await getActiveProperties();
+      if (active && active.length > 0) {
+        setAllProperties(active);
+      }
+    }
+    loadProps();
+  }, []);
 
   const categories = ['All', 'Residential', 'Land', 'Commercial', 'Rental'];
 
-  const filteredProperties = propertiesData
+  const filteredProperties = (allProperties || [])
     .filter((item) => {
+      if (!item) return false;
       const matchCat = category === 'All' || item.category === category;
       const matchType = typeFilter === 'All' || item.type === typeFilter;
-      const matchState = !stateCode || item.stateCode === stateCode;
+      const itemStateCode = item.stateCode || item.state_code || '';
+      const matchState = !stateCode || itemStateCode === stateCode;
+      
+      const q = (query || '').toLowerCase().trim();
+      if (!q) return matchCat && matchType && matchState;
+
+      const title = (item.title || '').toLowerCase();
+      const city = (item.city || '').toLowerCase();
+      const stateName = (item.state || '').toLowerCase();
+      const zip = String(item.zip || '');
+      const desc = (item.description || '').toLowerCase();
+
       const matchQuery =
-        item.title.toLowerCase().includes(query.toLowerCase()) ||
-        item.city.toLowerCase().includes(query.toLowerCase()) ||
-        item.state.toLowerCase().includes(query.toLowerCase()) ||
-        item.zip.includes(query);
+        title.includes(q) ||
+        city.includes(q) ||
+        stateName.includes(q) ||
+        zip.includes(q) ||
+        desc.includes(q);
+
       return matchCat && matchType && matchState && matchQuery;
     })
     .sort((a, b) => {

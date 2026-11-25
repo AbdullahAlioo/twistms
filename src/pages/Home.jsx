@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { propertiesData, platformStats, listingPlans } from '../data/properties';
+import { getActiveProperties } from '../lib/supabase';
 import PropertyCard from '../components/common/PropertyCard';
 import MortgageCalculator from '../components/common/MortgageCalculator';
 import TestimonialsSection from '../components/sections/TestimonialsSection';
@@ -52,15 +53,30 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedState, setSelectedState] = useState('');
+  const [propertiesList, setPropertiesList] = useState(propertiesData);
+
+  useEffect(() => {
+    async function loadProps() {
+      const active = await getActiveProperties();
+      if (active && active.length > 0) {
+        setPropertiesList(active);
+      }
+    }
+    loadProps();
+  }, []);
 
   const categories = ['All', 'Residential', 'Land', 'Commercial', 'Rental'];
 
-  const filteredProperties = propertiesData.filter((item) => {
+  const filteredProperties = (propertiesList || []).filter((item) => {
+    if (!item) return false;
     const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
-    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          item.state.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesState = !selectedState || item.stateCode === selectedState;
+    const q = searchTerm.toLowerCase().trim();
+    const matchesSearch = !q ||
+      (item.title || '').toLowerCase().includes(q) ||
+      (item.city || '').toLowerCase().includes(q) ||
+      (item.state || '').toLowerCase().includes(q);
+    const itemState = item.stateCode || item.state_code || '';
+    const matchesState = !selectedState || itemState === selectedState;
     return matchesCategory && matchesSearch && matchesState;
   });
 

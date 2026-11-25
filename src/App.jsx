@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { FavoritesProvider } from './context/FavoritesContext';
+import { AuthProvider } from './context/AuthContext';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
 import AIAssistantWidget from './components/common/AIAssistantWidget';
@@ -16,44 +17,52 @@ import Contact from './pages/Contact';
 import Pricing from './pages/Pricing';
 import PropertyDetail from './pages/PropertyDetail';
 import SubmitProperty from './pages/SubmitProperty';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import SellerDashboard from './pages/SellerDashboard';
 
 function App() {
   return (
     // reducedMotion="user": Framer Motion drops transform/layout animation
     // (keeps opacity) whenever the OS requests reduced motion.
     <MotionConfig reducedMotion="user">
-      <FavoritesProvider>
-        <Router>
-          <div className="min-h-screen text-[#111111] flex flex-col site-gradient-bg relative selection:bg-[#B4B4B4]/20 selection:text-[#111111]">
-            <div aria-hidden="true" className="site-glass" />
-            <SparkleField />
-            <IntroCurtain />
-            <ScrollProgressBar />
-            <Header />
-            <main className="flex-1">
-              <PageTransition>
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/search" element={<Search />} />
-                  <Route path="/agents" element={<Agents />} />
-                  <Route path="/pricing" element={<Pricing />} />
-                  <Route path="/contact" element={<Contact />} />
-                  <Route path="/submit" element={<SubmitProperty />} />
-                  <Route path="/property/:id" element={<PropertyDetail />} />
-                </Routes>
-              </PageTransition>
-            </main>
+      <AuthProvider>
+        <FavoritesProvider>
+          <Router>
+            <div className="min-h-screen text-[#111111] flex flex-col site-gradient-bg relative selection:bg-[#B4B4B4]/20 selection:text-[#111111]">
+              <div aria-hidden="true" className="site-glass" />
+              <SparkleField />
+              <IntroCurtain />
+              <ScrollProgressBar />
+              <Header />
+              <main className="flex-1">
+                <PageTransition>
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/search" element={<Search />} />
+                    <Route path="/agents" element={<Agents />} />
+                    <Route path="/pricing" element={<Pricing />} />
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/submit" element={<SubmitProperty />} />
+                    <Route path="/property/:id" element={<PropertyDetail />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                    <Route path="/dashboard" element={<SellerDashboard />} />
+                  </Routes>
+                </PageTransition>
+              </main>
 
-            {/* 24/7 AI Real Estate Assistant Floating Hub */}
-            <AIAssistantWidget />
+              {/* 24/7 AI Real Estate Assistant Floating Hub */}
+              <AIAssistantWidget />
 
-            {/* Saved Properties Slide-out Drawer */}
-            <FavoritesDrawer />
+              {/* Saved Properties Slide-out Drawer */}
+              <FavoritesDrawer />
 
-            <Footer />
-          </div>
-        </Router>
-      </FavoritesProvider>
+              <Footer />
+            </div>
+          </Router>
+        </FavoritesProvider>
+      </AuthProvider>
     </MotionConfig>
   );
 }

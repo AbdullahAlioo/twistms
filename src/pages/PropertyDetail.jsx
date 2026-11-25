@@ -4,6 +4,8 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { propertiesData } from '../data/properties';
 import { getListingDetails } from '../data/propertyDetails';
 import { useFavorites } from '../context/FavoritesContext';
+import { useAuth } from '../context/AuthContext';
+import { getPropertyById, recordPropertyView, submitPropertyInquiry } from '../lib/supabase';
 import PropertyCard from '../components/common/PropertyCard';
 import ScrollReveal from '../components/common/ScrollReveal';
 import { whatsappLink } from '../config/brand';
@@ -46,7 +48,35 @@ function FactRow({ label, value }) {
 
 export default function PropertyDetail() {
   const { id } = useParams();
-  const property = propertiesData.find((p) => p.id === id) || propertiesData[0];
+  const [property, setProperty] = useState(() => propertiesData.find((p) => p.id === id) || null);
+  const [loading, setLoading] = useState(!property);
+
+  useEffect(() => {
+    let active = true;
+    async function loadProp() {
+      const live = await getPropertyById(id);
+      if (active) {
+        setProperty((prev) => live || prev || propertiesData[0]);
+        setLoading(false);
+      }
+    }
+    loadProp();
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (loading || !property) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center space-y-3">
+        <div className="w-8 h-8 border-2 border-[#111111] border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-mono uppercase text-[#666666] tracking-wider">
+          Retrieving Property Deed & Syndication Record...
+        </p>
+      </div>
+    );
+  }
+
   // key: a fresh page (form, lightbox) for every listing
   return <ListingPage key={property.id} property={property} />;
 }
@@ -55,9 +85,17 @@ function ListingPage({ property }) {
   const reduce = useReducedMotion();
   const info = getListingDetails(property);
   const { toggleFavorite, isFavorite } = useFavorites();
+  const { user } = useAuth();
   const favorited = isFavorite(property.id);
 
   const [inquirySent, setInquirySent] = useState(false);
+  const [inquiryLoading, setInquiryLoading] = useState(false);
+  const [inquiryForm, setInquiryForm] = useState({
+    name: user?.full_name || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    message: `I'm interested in ${property.title} (${property.id.toUpperCase()}). Please send more information.`
+  });
   const [lightbox, setLightbox] = useState(null); // photo index or null
   const [shareMsg, setShareMsg] = useState('');
 
@@ -68,9 +106,11 @@ function ListingPage({ property }) {
   const isClose = (p) => p.category === property.category || p.stateCode === property.stateCode;
   const similarList = [...others.filter(isClose), ...others.filter((p) => !isClose(p))].slice(0, 3);
 
+  // Record view on visit
   useEffect(() => {
     window.scrollTo({ top: 0 });
-  }, []);
+    recordPropertyView(property.id, user?.id);
+  }, [property.id, user?.id]);
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -278,7 +318,7 @@ function ListingPage({ property }) {
             </dl>
           </InfoSection>
 
-          <InfoSection id="location" title="Location" sub="Where the property is, with an interactive map.">
+          <InfoSection id="location" title="Location & Map Pin" sub="Where the property is, with an interactive map and direct GPS navigation.">
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 mb-5">
               <div>
                 <FactRow label="Address" value={property.address} />
@@ -291,15 +331,76 @@ function ListingPage({ property }) {
                 <FactRow label="Terrain" value={info.topography} />
               </div>
             </dl>
-            <div className="rounded-xl overflow-hidden border border-[#2B2B2B]/15 h-64 sm:h-80 bg-[#E8E8E8]">
-              <iframe
-                title={`Map of ${property.title}`}
-                src={`https://maps.google.com/maps?q=${encodeURIComponent(`${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`)}&z=12&output=embed`}
-                className="w-full h-full"
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
+
+            {/* Direct Google Maps Action Bar */}
+            {(() => {
+              const locationUrl = property.location_url || property.locationUrl;
+              const googleMapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`)}`;
+              const mapLinkToOpen = locationUrl || googleMapsSearchUrl;
+
+              let iframeEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(
+                property.address && property.city
+                  ? `${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`
+                  : `${property.city}, ${property.stateCode}`
+              )}&z=13&output=embed`;
+
+              if (locationUrl) {
+                if (locationUrl.includes('output=embed') || locationUrl.includes('/embed')) {
+                  iframeEmbedUrl = locationUrl;
+                } else {
+                  const coordMatch = locationUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || locationUrl.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+                  if (coordMatch) {
+                    iframeEmbedUrl = `https://maps.google.com/maps?q=${coordMatch[1]},${coordMatch[2]}&z=14&output=embed`;
+                  }
+                }
+              }
+
+              return (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-[#FAFAFA] border border-[#2B2B2B]/12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center text-lg font-bold shrink-0">
+                        📍
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-[#111111]">
+                            {locationUrl ? 'Seller-Provided Verified Map Pin' : 'Google Maps Location'}
+                          </p>
+                          {locationUrl && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800">
+                              Direct Pin
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#555555] truncate max-w-xs sm:max-w-md">
+                          {locationUrl || `${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`}
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={mapLinkToOpen}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-luxury px-5 py-2.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <span>Open in Google Maps</span>
+                      <span className="text-xs">↗</span>
+                    </a>
+                  </div>
+
+                  <div className="rounded-xl overflow-hidden border border-[#2B2B2B]/15 h-64 sm:h-80 bg-[#E8E8E8] shadow-inner">
+                    <iframe
+                      title={`Map of ${property.title}`}
+                      src={iframeEmbedUrl}
+                      className="w-full h-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </InfoSection>
 
           {Object.keys(info.utilities).length > 0 && (
@@ -358,67 +459,154 @@ function ListingPage({ property }) {
           </InfoSection>
         </div>
 
-        {/* Right column: agent + inquiry (sticky on desktop) */}
+        {/* Right column: seller + inquiry (sticky on desktop) */}
         <aside id="contact" className="lg:col-span-4 scroll-mt-40 lg:sticky lg:top-40">
           <div className="bg-white rounded-2xl border border-[#2B2B2B]/12 shadow-xl overflow-hidden">
+            {/* Header: Seller profile */}
             <div className="p-5 bg-[#1C1C1C] text-white flex items-center gap-4">
               <div className="w-14 h-14 rounded-full bg-[#B4B4B4] text-[#111111] flex items-center justify-center font-editorial font-extrabold text-xl shrink-0">
-                {property.agent.name[0]}
+                {((property.owner_name || property.agent?.name || 'S')[0]).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-widest font-bold text-[#D0D0D0]">Listing Agent</p>
-                <h3 className="text-base font-extrabold font-editorial truncate">{property.agent.name}</h3>
-                <p className="text-xs text-white/70 font-medium truncate">{property.agent.agency}</p>
+                <span className="text-[10px] uppercase tracking-widest font-bold text-[#D0D0D0] block">
+                  {property.agent?.isDirectOwner || property.owner_name ? 'Direct Property Owner / Seller' : 'Listing Agent'}
+                </span>
+                <h3 className="text-base font-extrabold font-editorial truncate">
+                  {property.owner_name || property.agent?.name || 'Verified TwistMS Seller'}
+                </h3>
+                <p className="text-xs text-white/70 font-medium truncate">
+                  {property.agent?.agency || (property.owner_name ? 'Direct Property Owner' : 'TwistMS Elite Advisory')}
+                </p>
               </div>
             </div>
+
+            {/* Quick Contact Buttons */}
             <div className="px-5 pt-4 grid grid-cols-2 gap-2 text-xs">
-              <a href={`tel:${property.agent.phone.replace(/[^+\d]/g, '')}`} className="py-2.5 rounded-xl text-center font-bold btn-luxury-outline">Call</a>
-              <a href={`mailto:${property.agent.email}?subject=${encodeURIComponent(`Inquiry: ${property.title} (${property.id.toUpperCase()})`)}`} className="py-2.5 rounded-xl text-center font-bold btn-luxury-outline">Email</a>
-              <p className="col-span-2 text-[11px] text-[#555555] font-semibold text-center">{property.agent.phone} · {property.agent.email}</p>
+              <a
+                href={`tel:${(property.owner_phone || property.agent?.phone || '+1 (512) 555-0199').replace(/[^+\d]/g, '')}`}
+                className="py-2.5 rounded-xl text-center font-bold btn-luxury-outline flex items-center justify-center gap-1.5"
+              >
+                <span>📞 Call</span>
+              </a>
+              <a
+                href={`mailto:${property.owner_email || property.agent?.email || 'seller@twistms.com'}?subject=${encodeURIComponent(`Inquiry: ${property.title} (${property.id.toUpperCase()})`)}`}
+                className="py-2.5 rounded-xl text-center font-bold btn-luxury-outline flex items-center justify-center gap-1.5"
+              >
+                <span>✉️ Email</span>
+              </a>
+              <p className="col-span-2 text-[11px] text-[#555555] font-semibold text-center truncate">
+                {property.owner_phone || property.agent?.phone || '+1 (512) 555-0199'} · {property.owner_email || property.agent?.email || 'seller@twistms.com'}
+              </p>
             </div>
 
             <div className="p-5 space-y-4">
               <div>
                 <h4 className="text-base font-extrabold text-[#111111] font-editorial">Request Information</h4>
-                <p className="text-xs text-[#555555] font-medium">Ask a question or schedule a showing with the agent.</p>
+                <p className="text-xs text-[#555555] font-medium">Ask a question or request a showing directly from the seller.</p>
               </div>
               <AnimatePresence mode="wait" initial={false}>
                 {inquirySent ? (
                   <motion.div key="sent" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="p-5 rounded-xl bg-[#EFEFEF] border border-[#B4B4B4]/40 text-center space-y-2">
-                    <p className="font-bold text-sm text-[#2B2B2B]">Inquiry Sent Successfully!</p>
-                    <p className="text-[#555555] text-[11px] font-medium">The agent will reach out via email or WhatsApp within 2 hours.</p>
+                    <p className="font-bold text-sm text-[#2B2B2B]">Inquiry Delivered to Seller!</p>
+                    <p className="text-[#555555] text-[11px] font-medium">The listing owner has received your request in their seller dashboard.</p>
                     <button onClick={() => setInquirySent(false)} className="mt-2 text-[#6E6E6E] underline text-xs font-bold cursor-pointer">Send Another Inquiry</button>
                   </motion.div>
                 ) : (
-                  <motion.form key="form" initial={false} exit={{ opacity: 0 }} onSubmit={(e) => { e.preventDefault(); setInquirySent(true); }} className="space-y-3">
+                  <motion.form
+                    key="form"
+                    initial={false}
+                    exit={{ opacity: 0 }}
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setInquiryLoading(true);
+                      await submitPropertyInquiry({
+                        property_id: property.id,
+                        property_title: property.title,
+                        seller_id: property.user_id || 'demo-seller-101',
+                        seller_email: property.owner_email || property.agent?.email,
+                        seller_name: property.owner_name || property.agent?.name,
+                        buyer_id: user?.id || null,
+                        name: inquiryForm.name,
+                        email: inquiryForm.email,
+                        phone: inquiryForm.phone,
+                        message: inquiryForm.message,
+                      });
+                      setInquiryLoading(false);
+                      setInquirySent(true);
+                    }}
+                    className="space-y-3"
+                  >
                     <label className="block">
                       <span className="block text-[11px] text-[#111111] uppercase mb-1 font-bold">Full Name</span>
-                      <input type="text" required placeholder="e.g. John Doe" className={inputCls} />
+                      <input
+                        type="text"
+                        required
+                        value={inquiryForm.name}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, name: e.target.value })}
+                        placeholder="e.g. John Doe"
+                        className={inputCls}
+                      />
                     </label>
                     <label className="block">
                       <span className="block text-[11px] text-[#111111] uppercase mb-1 font-bold">Email</span>
-                      <input type="email" required placeholder="you@domain.com" className={inputCls} />
+                      <input
+                        type="email"
+                        required
+                        value={inquiryForm.email}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, email: e.target.value })}
+                        placeholder="you@domain.com"
+                        className={inputCls}
+                      />
                     </label>
                     <label className="block">
                       <span className="block text-[11px] text-[#111111] uppercase mb-1 font-bold">Phone / WhatsApp</span>
-                      <input type="tel" placeholder="+1 (555) 000-0000" className={inputCls} />
+                      <input
+                        type="tel"
+                        value={inquiryForm.phone}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, phone: e.target.value })}
+                        placeholder="+1 (555) 000-0000"
+                        className={inputCls}
+                      />
                     </label>
                     <label className="block">
                       <span className="block text-[11px] text-[#111111] uppercase mb-1 font-bold">Message</span>
-                      <textarea rows={3} defaultValue={`I'm interested in ${property.title} (${property.id.toUpperCase()}). Please send more information.`} className={inputCls} />
+                      <textarea
+                        rows={3}
+                        value={inquiryForm.message}
+                        onChange={(e) => setInquiryForm({ ...inquiryForm, message: e.target.value })}
+                        className={inputCls}
+                      />
                     </label>
-                    <button type="submit" className="w-full py-3 px-4 rounded-xl text-xs font-bold btn-luxury">Send Inquiry →</button>
+                    <button
+                      type="submit"
+                      disabled={inquiryLoading}
+                      className="w-full py-3 px-4 rounded-xl text-xs font-bold btn-luxury cursor-pointer"
+                    >
+                      {inquiryLoading ? 'Sending Inquiry...' : 'Send Inquiry to Seller →'}
+                    </button>
                   </motion.form>
                 )}
               </AnimatePresence>
-              <a
-                href={whatsappLink(`Hi, I am inquiring about TwistMS Property ${property.id} (${property.title})`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-4 rounded-xl text-xs font-bold btn-luxury-outline flex items-center justify-center gap-2"
-              >
-                Chat on WhatsApp
-              </a>
+
+              {/* Direct WhatsApp to Seller */}
+              {(() => {
+                const sellerPhone = property.owner_phone || property.agent?.phone || '';
+                const cleanDigits = sellerPhone.replace(/[^\d]/g, '');
+                const sellerWaLink = cleanDigits && cleanDigits.length >= 7
+                  ? `https://wa.me/${cleanDigits}?text=${encodeURIComponent(`Hi ${property.owner_name || property.agent?.name || 'there'}, I am inquiring about your listing on TwistMS: "${property.title}" (ID: ${property.id.toUpperCase()}). Is it still available?`)}`
+                  : whatsappLink(`Hi, I am inquiring about TwistMS Property ${property.id} (${property.title})`);
+
+                return (
+                  <a
+                    href={sellerWaLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2.5 px-4 rounded-xl text-xs font-bold btn-luxury-outline flex items-center justify-center gap-2 hover:bg-emerald-50 hover:border-emerald-500 hover:text-emerald-700 transition-colors"
+                  >
+                    <span>💬</span> Chat with Seller on WhatsApp
+                  </a>
+                );
+              })()}
             </div>
           </div>
         </aside>

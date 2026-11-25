@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useMotionValueEvent, useReducedMotion } from 'framer-motion';
 import { useFavorites } from '../../context/FavoritesContext';
+import { useAuth } from '../../context/AuthContext';
 import MagneticButton from '../motion/MagneticButton';
 import { EASE, SPRING_SOFT, SPRING_SNAPPY } from '../../lib/motion';
 import { BRAND } from '../../config/brand';
@@ -12,6 +13,7 @@ export default function Header() {
   const location = useLocation();
   const reduce = useReducedMotion();
   const { favorites, setIsDrawerOpen } = useFavorites();
+  const { user, profile, currentPlan, signOut } = useAuth();
 
   // Compact, more opaque bar once the page scrolls (no height change = no layout shift)
   const { scrollY } = useScroll();
@@ -20,8 +22,8 @@ export default function Header() {
   const navLinks = [
     { name: 'Marketplace', path: '/' },
     { name: 'Browse Properties', path: '/search' },
-    { name: 'Find an Agent', path: '/agents' },
     { name: 'Pricing', path: '/pricing' },
+    { name: 'Find an Agent', path: '/agents' },
     { name: 'Contact', path: '/contact' }
   ];
 
@@ -138,18 +140,60 @@ export default function Header() {
               </span>
             </motion.button>
 
-            <MagneticButton strength={0.22} radius={8}>
-              <Link
-                to="/submit"
-                className="px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 bg-[#B4B4B4] text-[#111111] hover:bg-[#E0E0E0] shadow-[0_10px_24px_-10px_rgba(180, 180, 180,0.8)] transition-colors duration-300"
-              >
-                <span>+ List Property</span>
-              </Link>
-            </MagneticButton>
+            {/* Auth / Dashboard CTA */}
+            {user ? (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/dashboard"
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-xs font-bold text-white transition-all shadow-sm"
+                  title="Open Seller Dashboard"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Dashboard</span>
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[#B4B4B4] text-[#111111]">
+                    {currentPlan}
+                  </span>
+                </Link>
+
+                <MagneticButton strength={0.22} radius={8}>
+                  <Link
+                    to="/submit"
+                    className="px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 bg-[#B4B4B4] text-[#111111] hover:bg-[#E0E0E0] shadow-[0_10px_24px_-10px_rgba(180, 180, 180,0.8)] transition-colors duration-300"
+                  >
+                    <span>+ List Property</span>
+                  </Link>
+                </MagneticButton>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/login"
+                  className="px-3 py-2 text-xs font-bold text-[#FAFAFA] hover:text-white transition-colors"
+                >
+                  Sign In
+                </Link>
+                <MagneticButton strength={0.22} radius={8}>
+                  <Link
+                    to="/register"
+                    className="px-4 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 bg-[#B4B4B4] text-[#111111] hover:bg-[#E0E0E0] shadow-[0_10px_24px_-10px_rgba(180, 180, 180,0.8)] transition-colors duration-300"
+                  >
+                    <span>Join as Seller</span>
+                  </Link>
+                </MagneticButton>
+              </div>
+            )}
           </div>
 
           {/* Mobile hamburger button */}
-          <div className="lg:hidden flex items-center">
+          <div className="lg:hidden flex items-center gap-2">
+            {user && (
+              <Link
+                to="/dashboard"
+                className="px-2.5 py-1.5 rounded-lg bg-white/10 text-[11px] font-bold text-white border border-white/15"
+              >
+                Dashboard
+              </Link>
+            )}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2.5 rounded-xl text-[#FAFAFA] border border-white/15 hover:bg-white/10 transition-colors"
@@ -224,6 +268,40 @@ export default function Header() {
                   </motion.div>
                 );
               })}
+
+              {user ? (
+                <motion.div
+                  variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
+                  transition={{ duration: 0.35, ease: EASE }}
+                >
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-3 rounded-lg text-sm font-bold text-emerald-400 bg-white/5"
+                  >
+                    <span>Seller Dashboard ({currentPlan} Plan)</span>
+                    <span>→</span>
+                  </Link>
+                </motion.div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-center py-2.5 rounded-xl text-xs font-bold text-white bg-white/10"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-center py-2.5 rounded-xl text-xs font-bold text-[#111111] bg-[#B4B4B4]"
+                  >
+                    Sign Up
+                  </Link>
+                </div>
+              )}
+
               <motion.div
                 variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
                 transition={{ duration: 0.35, ease: EASE }}
@@ -242,6 +320,17 @@ export default function Header() {
                 >
                   + List Property
                 </Link>
+                {user && (
+                  <button
+                    onClick={() => {
+                      signOut();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="w-full text-center py-2 rounded-xl text-xs text-gray-400 hover:text-white"
+                  >
+                    Sign Out
+                  </button>
+                )}
               </motion.div>
             </motion.div>
           </motion.div>

@@ -26,8 +26,9 @@ export default function InteractiveMapView({ properties, onSelectProperty }) {
   const pins = useMemo(() => {
     const perState = {};
     return properties.map((prop) => {
-      const base = STATE_COORDINATES[prop.stateCode] || { top: 50, left: 50 };
-      const n = (perState[prop.stateCode] = (perState[prop.stateCode] || 0) + 1) - 1;
+      const st = (prop.stateCode || prop.state_code || 'TX').toUpperCase();
+      const base = STATE_COORDINATES[st] || { top: 50, left: 50 };
+      const n = (perState[st] = (perState[st] || 0) + 1) - 1;
       const [dx, dy] = SPREAD[n % SPREAD.length];
       return { prop, top: base.top + dy, left: base.left + dx };
     });

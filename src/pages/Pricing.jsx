@@ -63,7 +63,7 @@ export default function Pricing() {
 
               <div className="mt-8 pt-6 border-t border-[#2B2B2B]/15">
                 <Link
-                  to="/submit"
+                  to={`/submit?plan=${plan.name.includes('Free') ? 'Free' : plan.name.includes('Paid') ? 'Paid' : 'Premium'}`}
                   className={`block text-center py-3 px-4 rounded-xl text-xs font-bold transition-all ${
                     plan.highlight
                       ? 'btn-luxury'
@@ -96,8 +96,8 @@ export default function Pricing() {
               <tbody className="divide-y divide-[#2B2B2B]/15 font-sans">
                 <tr>
                   <td className="py-3.5 px-4 font-bold text-[#111111]">Listing Duration</td>
-                  <td className="py-3.5 px-4 text-[#2B2B2B] font-medium">45 Days</td>
-                  <td className="py-3.5 px-4 text-[#6E6E6E] font-bold">150 Days</td>
+                  <td className="py-3.5 px-4 text-amber-800 font-bold">90 Days (Auto-Erased)</td>
+                  <td className="py-3.5 px-4 text-[#6E6E6E] font-bold">180 Days (6 Months)</td>
                   <td className="py-3.5 px-4 text-[#111111] font-extrabold">365 Days (1 Year)</td>
                 </tr>
                 <tr>
