@@ -326,33 +326,78 @@ function ListingPage({ property }) {
                 <FactRow label="County" value={info.county || '—'} />
               </div>
               <div>
-                <FactRow label="State" value={`${property.state} (${property.stateCode})`} />
-                <FactRow label="ZIP Code" value={property.zip} />
+                <FactRow label="State / Region" value={property.state || property.stateCode || '—'} />
+                {property.zip && property.zip !== '78701' && (
+                  <FactRow label="ZIP / Postal Code" value={property.zip} />
+                )}
                 <FactRow label="Terrain" value={info.topography} />
               </div>
             </dl>
 
             {/* Direct Google Maps Action Bar */}
             {(() => {
-              const locationUrl = property.location_url || property.locationUrl;
-              const googleMapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`)}`;
-              const mapLinkToOpen = locationUrl || googleMapsSearchUrl;
-
-              let iframeEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(
-                property.address && property.city
-                  ? `${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`
-                  : `${property.city}, ${property.stateCode}`
-              )}&z=13&output=embed`;
+              const locationUrl = (property.location_url || property.locationUrl || '').trim();
+              let iframeEmbedUrl = '';
+              let directLink = locationUrl;
 
               if (locationUrl) {
                 if (locationUrl.includes('output=embed') || locationUrl.includes('/embed')) {
                   iframeEmbedUrl = locationUrl;
                 } else {
-                  const coordMatch = locationUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || locationUrl.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
-                  if (coordMatch) {
-                    iframeEmbedUrl = `https://maps.google.com/maps?q=${coordMatch[1]},${coordMatch[2]}&z=14&output=embed`;
+                  // 1. Direct coordinates: "33.7214, 73.0583" or "33.7214,73.0583"
+                  const directCoord = locationUrl.match(/^(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+                  if (directCoord) {
+                    iframeEmbedUrl = `https://maps.google.com/maps?q=${directCoord[1]},${directCoord[2]}&z=15&output=embed`;
+                    if (!directLink.startsWith('http')) {
+                      directLink = `https://www.google.com/maps/search/?api=1&query=${directCoord[1]},${directCoord[2]}`;
+                    }
+                  } else {
+                    // 2. Google Maps @lat,lng
+                    const atCoord = locationUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                    if (atCoord) {
+                      iframeEmbedUrl = `https://maps.google.com/maps?q=${atCoord[1]},${atCoord[2]}&z=15&output=embed`;
+                    } else {
+                      // 3. Google Maps protobuf format !3d<lat>!4d<lng>
+                      const protoCoord = locationUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+                      if (protoCoord) {
+                        iframeEmbedUrl = `https://maps.google.com/maps?q=${protoCoord[1]},${protoCoord[2]}&z=15&output=embed`;
+                      } else {
+                        // 4. Query param q=lat,lng or q=place
+                        const qMatch = locationUrl.match(/[?&](?:q|query)=([^&]+)/);
+                        if (qMatch) {
+                          iframeEmbedUrl = `https://maps.google.com/maps?q=${qMatch[1]}&z=15&output=embed`;
+                        } else {
+                          // 5. Place name in URL: /place/Place+Name
+                          const placeMatch = locationUrl.match(/\/maps\/place\/([^\/@?]+)/);
+                          if (placeMatch) {
+                            iframeEmbedUrl = `https://maps.google.com/maps?q=${placeMatch[1]}&z=15&output=embed`;
+                          }
+                        }
+                      }
+                    }
                   }
                 }
+              }
+
+              // Fallback if coordinates were not in the link: build accurate search query without artificial Texas defaults
+              if (!iframeEmbedUrl) {
+                const parts = [];
+                if (property.address && property.address !== 'Confidential Address') parts.push(property.address);
+                if (property.city) parts.push(property.city);
+                if (property.state && !['Texas', 'TX'].includes(property.state)) parts.push(property.state);
+                else if (property.stateCode && !['Texas', 'TX'].includes(property.stateCode)) parts.push(property.stateCode);
+                if (property.zip && property.zip !== '78701') parts.push(property.zip);
+
+                const cleanQuery = parts.length > 0 ? parts.join(', ') : (property.city || property.title);
+                iframeEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(cleanQuery)}&z=14&output=embed`;
+
+                if (!directLink) {
+                  directLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanQuery)}`;
+                }
+              }
+
+              if (!directLink) {
+                directLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(property.city || property.title)}`;
               }
 
               return (
@@ -374,12 +419,12 @@ function ListingPage({ property }) {
                           )}
                         </div>
                         <p className="text-[11px] text-[#555555] truncate max-w-xs sm:max-w-md">
-                          {locationUrl || `${property.address}, ${property.city}, ${property.stateCode} ${property.zip}`}
+                          {locationUrl || `${property.address}, ${property.city}`}
                         </p>
                       </div>
                     </div>
                     <a
-                      href={mapLinkToOpen}
+                      href={directLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn-luxury px-5 py-2.5 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 shadow-sm"

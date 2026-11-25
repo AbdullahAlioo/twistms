@@ -45,7 +45,7 @@ export default function SubmitProperty() {
     price: '',
     address: '',
     city: '',
-    stateCode: 'TX',
+    stateCode: '',
     zip: '',
     bedrooms: '',
     bathrooms: '',
@@ -115,9 +115,9 @@ export default function SubmitProperty() {
         price: Number(formData.price) || 0,
         address: formData.address,
         city: formData.city,
-        state: formData.stateCode === 'TX' ? 'Texas' : formData.stateCode === 'CO' ? 'Colorado' : formData.stateCode === 'FL' ? 'Florida' : formData.stateCode === 'CA' ? 'California' : formData.stateCode === 'MT' ? 'Montana' : 'New York',
-        stateCode: formData.stateCode,
-        zip: formData.zip || '78701',
+        state: formData.stateCode || formData.city || 'Verified Location',
+        stateCode: formData.stateCode || '',
+        zip: formData.zip || '',
         bedrooms: Number(formData.bedrooms) || 0,
         bathrooms: Number(formData.bathrooms) || 0,
         sqft: Number(formData.sqft) || 0,
@@ -308,32 +308,27 @@ export default function SubmitProperty() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">City *</label>
+                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">City / Area *</label>
                       <input
                         type="text"
                         name="city"
                         required
                         value={formData.city}
                         onChange={handleChange}
-                        placeholder="Austin"
+                        placeholder="e.g. Austin or Islamabad"
                         className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">State</label>
-                      <select
+                      <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold">State / Province</label>
+                      <input
+                        type="text"
                         name="stateCode"
                         value={formData.stateCode}
                         onChange={handleChange}
-                        className="w-full bg-white text-xs text-[#111111] font-semibold border border-[#2B2B2B]/25 rounded-xl px-3.5 py-3 focus:outline-none focus:border-[#B4B4B4] cursor-pointer shadow-sm"
-                      >
-                        <option value="TX">Texas (TX)</option>
-                        <option value="CO">Colorado (CO)</option>
-                        <option value="FL">Florida (FL)</option>
-                        <option value="CA">California (CA)</option>
-                        <option value="MT">Montana (MT)</option>
-                        <option value="NY">New York (NY)</option>
-                      </select>
+                        placeholder="e.g. TX, Punjab, London"
+                        className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
+                      />
                     </div>
                   </div>
 
@@ -389,21 +384,21 @@ export default function SubmitProperty() {
                   {/* Google Maps Pin & Direct Directions URL */}
                   <div>
                     <label className="block text-[11px] font-mono text-[#111111] uppercase mb-1.5 font-bold flex flex-wrap items-center justify-between gap-1">
-                      <span>Google Maps Location Link / Map Pin URL</span>
+                      <span>Google Maps Location Link, Map Pin, or GPS Coordinates</span>
                       <span className="text-[10px] text-[#6E6E6E] font-normal normal-case">
-                        (Open Google Maps → Click "Share" → "Copy link")
+                        (Google Maps link or coordinates like 33.7214, 73.0583)
                       </span>
                     </label>
                     <input
-                      type="url"
+                      type="text"
                       name="locationUrl"
                       value={formData.locationUrl}
                       onChange={handleChange}
-                      placeholder="e.g. https://maps.app.goo.gl/xyz123 or https://goo.gl/maps/..."
+                      placeholder="e.g. https://maps.app.goo.gl/... or 33.7214, 73.0583 or Google Maps URL"
                       className="w-full bg-white text-xs text-[#111111] font-medium border border-[#2B2B2B]/25 rounded-xl px-4 py-3 placeholder:text-[#6B6B6B] focus:outline-none focus:border-[#B4B4B4] shadow-sm"
                     />
                     <p className="text-[10.5px] text-[#555555] mt-1 font-medium">
-                      Providing a Google Maps pin enables buyers to view the exact location and navigate directly using GPS directions.
+                      Tip: You can paste a link from Google Maps (Share → Copy link) or enter latitude/longitude coordinates (e.g. 33.7214, 73.0583) for an exact live satellite preview.
                     </p>
                   </div>
 
