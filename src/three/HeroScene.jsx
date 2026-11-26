@@ -59,10 +59,10 @@ export default function HeroScene({
   return (
     <Canvas
       frameloop={frameloop}
-      shadows={quality === 'high'}
-      dpr={quality === 'high' ? [1, 1.75] : [1, 1.4]}
+      shadows={false}
+      dpr={[1, 1.25]}
       camera={{ fov: 36, near: 0.5, far: 140, position: [19.5, 9.0, 23.5] }}
-      gl={{ antialias: true, alpha: false, powerPreference: 'high-performance', stencil: false }}
+      gl={{ antialias: true, alpha: false, powerPreference: 'low-power', stencil: false }}
       style={{ position: 'absolute', inset: 0 }}
       aria-hidden="true"
     >

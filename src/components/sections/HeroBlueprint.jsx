@@ -50,8 +50,8 @@ export default function HeroBlueprint() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // On mobile screens, remove heavy 130vh sticky lock to guarantee buttery smooth 60fps scrolling
-  const pinVh = reduce || isMobile ? 100 : quality === 'high' ? 130 : 110;
+  // Standard height without awkward scroll-locking
+  const pinVh = 100;
 
   /* ---- scroll progress across the pinned section ---- */
   const { scrollYProgress: rawProgress } = useScroll({
@@ -59,8 +59,8 @@ export default function HeroBlueprint() {
     offset: [`start ${HEADER_PX}px`, 'end end'],
   });
 
-  // Eased progress: the animation glides after the scrollbar
-  const scrollYProgress = useSpring(rawProgress, { stiffness: 90, damping: 22, mass: 0.6, restDelta: 0.0005 });
+  // Fast, instant 1:1 scroll progress without sluggish gliding delay
+  const scrollYProgress = rawProgress;
 
   /* ---- mouse / touch input ---- */
   const rawX = useMotionValue(0);
