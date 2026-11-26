@@ -17,11 +17,17 @@ function StateDriver({ state, progress, mouseX, mouseY, frozenProgress }) {
   const start = useRef(null);
   useFrame(({ clock }) => {
     if (start.current === null) start.current = clock.elapsedTime;
-    state.elapsed = frozenProgress !== null ? 10 : clock.elapsedTime - start.current;
-    const p = frozenProgress !== null ? frozenProgress : progress.get();
+    const elapsed = clock.elapsedTime - start.current;
+    state.elapsed = frozenProgress !== null ? 10 : elapsed;
+
+    // Automatically assemble the 3D villa from wireframe to solid architectural pavilion
+    const autoProgress = frozenProgress !== null ? 0.72 : Math.min(0.72, elapsed / 3.0);
+    const scrollP = progress && typeof progress.get === 'function' ? progress.get() : 0;
+    const p = Math.max(autoProgress, scrollP);
+
     state.phase = phaseState(p);
-    state.mouse.x = mouseX.get();
-    state.mouse.y = mouseY.get();
+    state.mouse.x = mouseX && typeof mouseX.get === 'function' ? mouseX.get() : 0;
+    state.mouse.y = mouseY && typeof mouseY.get === 'function' ? mouseY.get() : 0;
   });
   return null;
 }
