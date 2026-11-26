@@ -24,8 +24,7 @@ export default function Header() {
     { name: 'Browse Properties', path: '/search' },
     { name: 'Pricing', path: '/pricing' },
     { name: 'Find an Agent', path: '/agents' },
-    { name: 'Contact', path: '/contact' },
-    { name: 'Admin Desk', path: '/admin' }
+    { name: 'Contact', path: '/contact' }
   ];
 
   return (

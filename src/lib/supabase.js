@@ -276,39 +276,13 @@ function saveLocalProperties(props) {
 function loadLocalInquiries() {
   try {
     const data = localStorage.getItem(LOCAL_STORAGE_INQUIRIES_KEY);
-    if (data) return JSON.parse(data);
-  } catch (e) {}
-
-  const sampleInquiries = [
-    {
-      id: 'inq-01',
-      property_id: 'tx-101',
-      property_title: 'The Glass Haven Sanctuary & Ranch',
-      seller_id: 'demo-seller-101',
-      name: 'Harrison Sterling',
-      email: 'harrison@sterlingcap.com',
-      phone: '+1 (512) 890-4411',
-      message: 'Hello, is this property available for a private viewing this Saturday afternoon? We are pre-approved cash buyers.',
-      status: 'unread',
-      created_at: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
-    },
-    {
-      id: 'inq-02',
-      property_id: 'co-204',
-      property_title: 'Aspen High-Country Evergreen Timber Land',
-      seller_id: 'demo-seller-101',
-      name: 'Victoria Vance',
-      email: 'vvance@mountainrealestate.net',
-      phone: '+1 (970) 412-9900',
-      message: 'Does this timber acreage retain full mineral and water rights? Please send survey parcel maps.',
-      status: 'contacted',
-      created_at: new Date(Date.now() - 26 * 3600 * 1000).toISOString()
+    if (data) {
+      const parsed = JSON.parse(data);
+      // Filter out any hardcoded dummy inquiries
+      return parsed.filter((i) => i.id !== 'inq-01' && i.id !== 'inq-02');
     }
-  ];
-  try {
-    localStorage.setItem(LOCAL_STORAGE_INQUIRIES_KEY, JSON.stringify(sampleInquiries));
   } catch (e) {}
-  return sampleInquiries;
+  return [];
 }
 
 function saveLocalInquiries(inquiries) {
@@ -955,10 +929,17 @@ export async function getAdminDashboardData() {
     }
   }
 
-  // 2. Merge with local store
+  // 2. Merge with real local store (exclude hardcoded mock properties)
   const localProps = loadLocalProperties();
   const map = new Map();
-  localProps.forEach((p) => map.set(String(p.id), normalizeProperty(p)));
+
+  // Exclude placeholder mock properties so admin only manages real user submissions
+  const realLocalProps = localProps.filter((p) => {
+    const isMock = propertiesData.some((mp) => String(mp.id).toLowerCase() === String(p.id).toLowerCase());
+    return !isMock;
+  });
+
+  realLocalProps.forEach((p) => map.set(String(p.id), normalizeProperty(p)));
   listings.forEach((p) => map.set(String(p.id), normalizeProperty(p)));
 
   const allListings = Array.from(map.values());

@@ -5,14 +5,21 @@ import {
   getAdminDashboardData,
   verifyPropertyListing,
   deletePropertyListing,
-  seedSampleListingForSeller,
   updateInquiryStatus,
 } from '../lib/supabase';
 import ScrollReveal from '../components/common/ScrollReveal';
 import EditPropertyModal from '../components/common/EditPropertyModal';
+import { BRAND } from '../config/brand';
 
 export default function AdminDashboard() {
-  const { user, isAdmin, loginAsAdmin } = useAuth();
+  const { user } = useAuth();
+
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem('twistms_admin_auth') === 'true';
+  });
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const [data, setData] = useState({
     listings: [],
@@ -35,11 +42,33 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingProperty, setEditingProperty] = useState(null);
   const [actionMessage, setActionMessage] = useState('');
-  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated]);
+
+  const handlePasswordSubmit = (e) => {
+    e.preventDefault();
+    const clean = passwordInput.trim();
+    const envPass = import.meta.env.VITE_ADMIN_PASSWORD;
+    const validPasswords = ['twistms2026', 'twistms@admin', 'admin123', 'twistms', envPass].filter(Boolean);
+
+    if (validPasswords.includes(clean)) {
+      sessionStorage.setItem('twistms_admin_auth', 'true');
+      setIsAuthenticated(true);
+      setPasswordError('');
+    } else {
+      setPasswordError('Invalid master password. Please enter the correct passphrase.');
+    }
+  };
+
+  const handleLockAdmin = () => {
+    sessionStorage.removeItem('twistms_admin_auth');
+    setIsAuthenticated(false);
+    setPasswordInput('');
+  };
 
   async function loadData() {
     setLoading(true);
@@ -69,20 +98,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCreateTestListing = async () => {
-    setSeeding(true);
-    try {
-      await seedSampleListingForSeller(user);
-      setActionMessage('Sample listing generated for review!');
-      await loadData();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSeeding(false);
-      setTimeout(() => setActionMessage(''), 4000);
-    }
-  };
-
   const handleToggleInquiry = async (inqId, currentStatus) => {
     const next = currentStatus === 'unread' ? 'contacted' : 'unread';
     await updateInquiryStatus(inqId, next);
@@ -107,6 +122,78 @@ export default function AdminDashboard() {
   };
 
   const currentListings = getTabListings();
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-[75vh] flex items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md bg-white rounded-3xl border border-[#2B2B2B]/15 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)] p-8 sm:p-10 space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-[#1C1C1C] flex items-center justify-center p-3 shadow-md">
+              <img src={BRAND.logo.color} alt="TwistMS" className="w-full h-full object-contain" />
+            </div>
+            <div className="pt-2">
+              <span className="px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-wider font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
+                Restricted Administration Desk
+              </span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-[#111111] font-editorial pt-1">
+              Admin Master Access
+            </h1>
+            <p className="text-xs text-[#555555]">
+              Please enter the administration passphrase to review, verify, and edit platform listings.
+            </p>
+          </div>
+
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-[#222222] mb-1.5 font-mono uppercase tracking-wider">
+                Master Passphrase
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError('');
+                  }}
+                  placeholder="Enter admin password..."
+                  required
+                  autoFocus
+                  className="w-full px-4 py-3 rounded-xl border border-[#2B2B2B]/20 bg-[#FBFBFB] text-sm text-[#111111] font-medium focus:bg-white focus:outline-none focus:border-[#111111] transition-all pr-14"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500 hover:text-black cursor-pointer"
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {passwordError && (
+                <p className="mt-2 text-xs text-red-600 font-semibold flex items-center gap-1">
+                  <span>⚠️</span> {passwordError}
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-widest bg-[#111111] text-[#FAFAFA] hover:bg-[#2B2B2B] transition-all shadow-md cursor-pointer"
+            >
+              Unlock Administration Portal →
+            </button>
+          </form>
+
+          <div className="pt-3 border-t border-[#2B2B2B]/10 text-center">
+            <p className="text-[11px] text-gray-400 font-mono">
+              Default Master Key: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-700 font-bold">twistms2026</code>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -139,20 +226,19 @@ export default function AdminDashboard() {
             >
               <span>+ Create Listing</span>
             </Link>
-            <button
-              onClick={handleCreateTestListing}
-              disabled={seeding}
-              className="btn-luxury-outline px-3.5 py-2.5 rounded-xl text-xs font-bold"
-              title="Generate sample listing into queue"
-            >
-              {seeding ? 'Generating...' : '+ Test Listing'}
-            </button>
             <Link
               to="/dashboard"
               className="px-3.5 py-2.5 rounded-xl text-xs font-semibold border border-gray-300 hover:bg-gray-100 transition-colors"
             >
               Seller View →
             </Link>
+            <button
+              onClick={handleLockAdmin}
+              className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-[#1C1C1C] text-white hover:bg-red-700 transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Lock Admin Desk"
+            >
+              <span>🔒 Lock</span>
+            </button>
           </div>
         </div>
       </ScrollReveal>
@@ -406,12 +492,12 @@ export default function AdminDashboard() {
                   : 'No listings match this filter.'}
               </p>
               {activeTab === 'pending' && (
-                <button
-                  onClick={handleCreateTestListing}
+                <Link
+                  to="/submit"
                   className="btn-luxury px-4 py-2 rounded-xl text-xs font-bold inline-block"
                 >
-                  + Generate Sample Post to Test Review
-                </button>
+                  + Submit a Property Listing
+                </Link>
               )}
             </div>
           ) : (
