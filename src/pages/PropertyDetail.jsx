@@ -185,6 +185,7 @@ function ListingPage({ property }) {
             </div>
           </div>
           <button
+            type="button"
             onClick={handleAdminVerify}
             disabled={verifying}
             className="shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors cursor-pointer"

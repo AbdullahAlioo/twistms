@@ -82,15 +82,66 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleVerify = async (propId, approve = true) => {
-    await verifyPropertyListing(propId, approve);
-    setActionMessage(approve ? 'Listing verified and published live to website! ✓' : 'Listing unapproved and archived.');
+  const handleVerify = async (e, propId, approve = true) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    // Optimistic UI update so the listing immediately shifts tabs without reloading
+    setData((prev) => {
+      const updatedListings = prev.listings.map((p) =>
+        String(p.id) === String(propId)
+          ? { ...p, status: approve ? 'active' : 'pending_review', verified: Boolean(approve) }
+          : p
+      );
+      const pendingListings = updatedListings.filter((p) => p.status === 'pending_review' || !p.verified);
+      const activeListings = updatedListings.filter((p) => p.status === 'active' && p.verified);
+      return {
+        ...prev,
+        listings: updatedListings,
+        pendingListings,
+        activeListings,
+        stats: {
+          ...prev.stats,
+          pendingCount: pendingListings.length,
+          activeCount: activeListings.length,
+        }
+      };
+    });
+
+    try {
+      await verifyPropertyListing(propId, approve);
+      setActionMessage(approve ? 'Listing verified and published live to website! ✓' : 'Listing unpublished and moved to pending verification.');
+    } catch (err) {
+      console.error('Verify error:', err);
+    }
     await loadData();
     setTimeout(() => setActionMessage(''), 4000);
   };
 
-  const handleDelete = async (propId, title) => {
+  const handleDelete = async (e, propId, title) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+
     if (window.confirm(`Are you sure you want to permanently delete "${title}"?`)) {
+      // Optimistic delete
+      setData((prev) => {
+        const remaining = prev.listings.filter((p) => String(p.id) !== String(propId));
+        const pendingListings = remaining.filter((p) => p.status === 'pending_review' || !p.verified);
+        const activeListings = remaining.filter((p) => p.status === 'active' && p.verified);
+        return {
+          ...prev,
+          listings: remaining,
+          pendingListings,
+          activeListings,
+          stats: {
+            ...prev.stats,
+            totalListings: remaining.length,
+            pendingCount: pendingListings.length,
+            activeCount: activeListings.length,
+          }
+        };
+      });
+
       await deletePropertyListing(propId);
       setActionMessage('Listing deleted permanently.');
       await loadData();
@@ -610,7 +661,8 @@ export default function AdminDashboard() {
                               {/* Verify & Publish Button */}
                               {isPending ? (
                                 <button
-                                  onClick={() => handleVerify(prop.id, true)}
+                                  type="button"
+                                  onClick={(e) => handleVerify(e, prop.id, true)}
                                   className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-sm cursor-pointer transition-colors"
                                   title="Approve this deed and publish live to the website"
                                 >
@@ -618,7 +670,8 @@ export default function AdminDashboard() {
                                 </button>
                               ) : (
                                 <button
-                                  onClick={() => handleVerify(prop.id, false)}
+                                  type="button"
+                                  onClick={(e) => handleVerify(e, prop.id, false)}
                                   className="px-2.5 py-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 text-[11px] font-semibold cursor-pointer"
                                   title="Unpublish this listing"
                                 >
@@ -628,7 +681,12 @@ export default function AdminDashboard() {
 
                               {/* Edit Each and Every Thing */}
                               <button
-                                onClick={() => setEditingProperty(prop)}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setEditingProperty(prop);
+                                }}
                                 className="px-2.5 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-100 text-[11px] font-bold text-gray-800 cursor-pointer transition-colors"
                                 title="Edit each detail of this listing"
                               >
@@ -646,7 +704,8 @@ export default function AdminDashboard() {
 
                               {/* Delete */}
                               <button
-                                onClick={() => handleDelete(prop.id, prop.title)}
+                                type="button"
+                                onClick={(e) => handleDelete(e, prop.id, prop.title)}
                                 className="px-2 py-1.5 rounded-lg text-red-600 hover:bg-red-50 text-[11px] font-bold cursor-pointer"
                                 title="Delete listing"
                               >

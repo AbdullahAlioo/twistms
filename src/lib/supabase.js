@@ -888,12 +888,12 @@ export async function updatePropertyListing(id, updates) {
 }
 
 /**
- * Verify or Reject a listing (Admin action)
+ * Verify or Unpublish a listing (Admin action)
  */
 export async function verifyPropertyListing(id, approve = true) {
   return updatePropertyListing(id, {
-    status: approve ? 'active' : 'rejected',
-    verified: approve,
+    status: approve ? 'active' : 'pending_review',
+    verified: Boolean(approve),
   });
 }
 
