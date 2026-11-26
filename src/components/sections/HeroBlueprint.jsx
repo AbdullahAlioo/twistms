@@ -42,9 +42,16 @@ export default function HeroBlueprint() {
 
   const [visible, setVisible] = useState(true);
   const [phase, setPhase] = useState(() => phaseLabel(0));
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
 
-  // Long enough that a normal-speed scroll shows every stage of the build
-  const pinVh = reduce ? 100 : quality === 'high' ? 130 : 110;
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // On mobile screens, remove heavy 130vh sticky lock to guarantee buttery smooth 60fps scrolling
+  const pinVh = reduce || isMobile ? 100 : quality === 'high' ? 130 : 110;
 
   /* ---- scroll progress across the pinned section ---- */
   const { scrollYProgress: rawProgress } = useScroll({
@@ -52,8 +59,7 @@ export default function HeroBlueprint() {
     offset: [`start ${HEADER_PX}px`, 'end end'],
   });
 
-  // Eased progress: the animation glides after the scrollbar, so even a quick
-  // flick plays out over about a second instead of jumping to the end.
+  // Eased progress: the animation glides after the scrollbar
   const scrollYProgress = useSpring(rawProgress, { stiffness: 90, damping: 22, mass: 0.6, restDelta: 0.0005 });
 
   /* ---- mouse / touch input ---- */
@@ -63,7 +69,7 @@ export default function HeroBlueprint() {
   const mouseY = useSpring(rawY, { stiffness: 50, damping: 20, mass: 1 });
 
   const onPointerMove = (e) => {
-    if (reduce || !isFinePointer() || !stageRef.current) return;
+    if (reduce || isMobile || !isFinePointer() || !stageRef.current) return;
     const r = stageRef.current.getBoundingClientRect();
     rawX.set(((e.clientX - r.left) / r.width - 0.5) * 2);
     rawY.set(((e.clientY - r.top) / r.height - 0.5) * 2);
@@ -73,9 +79,9 @@ export default function HeroBlueprint() {
     rawY.set(0);
   };
 
-  // Touch devices: a gentle automatic sway replaces the cursor parallax
+  // Only run subtle sway on non-mobile devices without fine pointer
   useEffect(() => {
-    if (reduce || isFinePointer()) return undefined;
+    if (reduce || isMobile || isFinePointer()) return undefined;
     let raf;
     const t0 = performance.now();
     const tick = (now) => {
@@ -86,7 +92,7 @@ export default function HeroBlueprint() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [reduce, rawX, rawY]);
+  }, [reduce, isMobile, rawX, rawY]);
 
   /* ---- render only while on screen ---- */
   useEffect(() => {
@@ -139,9 +145,9 @@ export default function HeroBlueprint() {
         className="sticky overflow-hidden bg-[#0E141B] text-[#F4F4F4]"
         style={{ top: HEADER_PX, height: `calc(100vh - ${HEADER_PX}px)` }}
       >
-        {/* ---------- 3D stage ---------- */}
+        {/* ---------- 3D stage (Render lightweight SVG on mobile to eliminate lag & frame drops) ---------- */}
         <motion.div className="absolute inset-0" style={{ opacity: reduce ? 1 : stageOpacity, scale: reduce ? 1 : stageScale }}>
-          {supported ? (
+          {supported && !isMobile ? (
             <Suspense fallback={<HeroFallback />}>
               <HeroScene {...sceneProps} active={visible} frozenProgress={frozenProgress} />
             </Suspense>

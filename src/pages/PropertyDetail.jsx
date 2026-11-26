@@ -5,7 +5,7 @@ import { propertiesData } from '../data/properties';
 import { getListingDetails } from '../data/propertyDetails';
 import { useFavorites } from '../context/FavoritesContext';
 import { useAuth } from '../context/AuthContext';
-import { getPropertyById, recordPropertyView, submitPropertyInquiry } from '../lib/supabase';
+import { getPropertyById, recordPropertyView, submitPropertyInquiry, verifyPropertyListing } from '../lib/supabase';
 import PropertyCard from '../components/common/PropertyCard';
 import ScrollReveal from '../components/common/ScrollReveal';
 import { whatsappLink } from '../config/brand';
@@ -90,6 +90,22 @@ function ListingPage({ property }) {
 
   const [inquirySent, setInquirySent] = useState(false);
   const [inquiryLoading, setInquiryLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [localProp, setLocalProp] = useState(property);
+
+  const isVerified = localProp.verified && localProp.status === 'active';
+
+  const handleAdminVerify = async () => {
+    setVerifying(true);
+    try {
+      await verifyPropertyListing(localProp.id, true);
+      setLocalProp((prev) => ({ ...prev, verified: true, status: 'active' }));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setVerifying(false);
+    }
+  };
   const [inquiryForm, setInquiryForm] = useState({
     name: user?.full_name || '',
     email: user?.email || '',
@@ -153,6 +169,30 @@ function ListingPage({ property }) {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+
+      {/* Verification Review Notice */}
+      {!isVerified && (
+        <div className="rounded-2xl bg-amber-50 border border-amber-200/90 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl">⏳</span>
+            <div>
+              <p className="text-xs sm:text-sm font-bold text-amber-950 font-editorial">
+                Under TwistMS Verification Review
+              </p>
+              <p className="text-[11px] sm:text-xs text-amber-800 font-medium mt-0.5">
+                This listing was submitted and is currently being verified against deed records by the TwistMS Admin desk. It will be syndicated across the public marketplace once approved.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleAdminVerify}
+            disabled={verifying}
+            className="shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors cursor-pointer"
+          >
+            {verifying ? 'Verifying...' : '✓ Approve & Publish Listing'}
+          </button>
+        </div>
+      )}
 
       {/* 1. Breadcrumb */}
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-xs text-[#555555] font-semibold">

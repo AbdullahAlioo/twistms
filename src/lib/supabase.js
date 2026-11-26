@@ -376,6 +376,8 @@ export async function getActiveProperties(filters = {}) {
 
   return allActive.filter((p) => {
     if (new Date(p.expires_at) <= now) return false;
+    // Only verified, active listings appear on public marketplace
+    if (p.status !== 'active') return false;
     if (filters.category && filters.category !== 'All' && p.category !== filters.category) return false;
     if (filters.type && filters.type !== 'All' && p.type !== filters.type) return false;
     return true;
@@ -514,11 +516,11 @@ export async function createPropertyListing(propertyData, user) {
     images: images,
     videos: Array.isArray(propertyData.videos) ? propertyData.videos : [],
     plan: plan,
-    status: 'active',
+    status: propertyData.status || 'pending_review',
     expires_at: expiresAt.toISOString(),
     views_count: 0,
     featured: Boolean(propertyData.featured),
-    verified: true,
+    verified: propertyData.verified !== undefined ? Boolean(propertyData.verified) : false,
     has_deed: propertyData.hasDeed !== undefined ? Boolean(propertyData.hasDeed) : true,
     has_tax_receipt: propertyData.hasTaxReceipt !== undefined ? Boolean(propertyData.hasTaxReceipt) : true,
   };
@@ -812,4 +814,177 @@ export async function updateInquiryStatus(inquiryId, newStatus) {
     localInquiries[idx].status = newStatus;
     saveLocalInquiries(localInquiries);
   }
+}
+
+/**
+ * Update any listing (Admin or Seller).
+ * Allows modifying each and every property field.
+ */
+export async function updatePropertyListing(id, updates) {
+  if (!id) return { success: false, error: 'No ID provided' };
+
+  // Prepare metadata updates if seller contact or location_url changed
+  let updatedDescription = updates.description;
+  if (
+    updates.ownerName !== undefined ||
+    updates.owner_name !== undefined ||
+    updates.ownerPhone !== undefined ||
+    updates.owner_phone !== undefined ||
+    updates.ownerEmail !== undefined ||
+    updates.owner_email !== undefined ||
+    updates.locationUrl !== undefined ||
+    updates.location_url !== undefined
+  ) {
+    const sellerMeta = {
+      owner_name: updates.ownerName || updates.owner_name || '',
+      owner_email: updates.ownerEmail || updates.owner_email || '',
+      owner_phone: updates.ownerPhone || updates.owner_phone || '',
+      location_url: updates.locationUrl || updates.location_url || '',
+    };
+    const cleanDesc = (updates.description || '')
+      .replace(/<!--SELLER_METADATA:[\s\S]*?-->/g, '')
+      .trim();
+    updatedDescription = `${cleanDesc}\n\n<!--SELLER_METADATA:${JSON.stringify(sellerMeta)}-->`;
+  }
+
+  const cleanPayload = {
+    ...(updates.title !== undefined && { title: updates.title }),
+    ...(updates.category !== undefined && { category: updates.category }),
+    ...(updates.type !== undefined && { type: updates.type }),
+    ...(updates.price !== undefined && { price: Number(updates.price) || 0 }),
+    ...(updates.pricePeriod !== undefined && { price_period: updates.pricePeriod }),
+    ...(updates.address !== undefined && { address: updates.address }),
+    ...(updates.city !== undefined && { city: updates.city }),
+    ...(updates.state !== undefined && { state: updates.state }),
+    ...(updates.stateCode !== undefined && { state_code: updates.stateCode }),
+    ...(updates.zip !== undefined && { zip: updates.zip }),
+    ...(updates.bedrooms !== undefined && { bedrooms: Number(updates.bedrooms) || 0 }),
+    ...(updates.bathrooms !== undefined && { bathrooms: Number(updates.bathrooms) || 0 }),
+    ...(updates.sqft !== undefined && { sqft: Number(updates.sqft) || 0 }),
+    ...(updates.acreage !== undefined && { acreage: Number(updates.acreage) || 0 }),
+    ...(updatedDescription !== undefined && { description: updatedDescription }),
+    ...(updates.plan !== undefined && { plan: updates.plan }),
+    ...(updates.status !== undefined && { status: updates.status }),
+    ...(updates.verified !== undefined && { verified: Boolean(updates.verified) }),
+    ...(updates.images !== undefined && { images: updates.images }),
+    ...(updates.ownerName !== undefined && { owner_name: updates.ownerName }),
+    ...(updates.ownerEmail !== undefined && { owner_email: updates.ownerEmail }),
+    ...(updates.ownerPhone !== undefined && { owner_phone: updates.ownerPhone }),
+    ...(updates.locationUrl !== undefined && { location_url: updates.locationUrl }),
+    updated_at: new Date().toISOString(),
+  };
+
+  // 1. Update Supabase
+  if (isSupabaseConfigured) {
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update(cleanPayload)
+        .eq('id', id);
+
+      if (error && error.message.includes('column')) {
+        // Fallback without custom columns (metadata is embedded in description)
+        const { owner_name, owner_email, owner_phone, location_url, ...basePayload } = cleanPayload;
+        await supabase
+          .from('properties')
+          .update(basePayload)
+          .eq('id', id);
+      }
+    } catch (e) {
+      console.warn('Supabase update failed, using local update:', e);
+    }
+  }
+
+  // 2. Update in local store
+  const props = loadLocalProperties();
+  const idx = props.findIndex((p) => String(p.id) === String(id));
+  if (idx !== -1) {
+    props[idx] = normalizeProperty({
+      ...props[idx],
+      ...cleanPayload,
+      ownerName: updates.ownerName || updates.owner_name || props[idx].owner_name,
+      ownerEmail: updates.ownerEmail || updates.owner_email || props[idx].owner_email,
+      ownerPhone: updates.ownerPhone || updates.owner_phone || props[idx].owner_phone,
+      locationUrl: updates.locationUrl || updates.location_url || props[idx].location_url,
+    });
+    saveLocalProperties(props);
+  }
+
+  return { success: true };
+}
+
+/**
+ * Verify or Reject a listing (Admin action)
+ */
+export async function verifyPropertyListing(id, approve = true) {
+  return updatePropertyListing(id, {
+    status: approve ? 'active' : 'rejected',
+    verified: approve,
+  });
+}
+
+/**
+ * Fetch all platform listings & inquiries for Admin Dashboard
+ */
+export async function getAdminDashboardData() {
+  let listings = [];
+  let inquiries = [];
+
+  // 1. Fetch from Supabase
+  if (isSupabaseConfigured) {
+    try {
+      const [propsRes, inqRes] = await Promise.all([
+        supabase
+          .from('properties')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('inquiries')
+          .select('*')
+          .order('created_at', { ascending: false })
+      ]);
+
+      if (propsRes.data && propsRes.data.length > 0) {
+        listings = propsRes.data.map(normalizeProperty);
+      }
+      if (inqRes.data && inqRes.data.length > 0) {
+        inquiries = inqRes.data;
+      }
+    } catch (e) {
+      console.warn('Admin fetch Supabase error:', e);
+    }
+  }
+
+  // 2. Merge with local store
+  const localProps = loadLocalProperties();
+  const map = new Map();
+  localProps.forEach((p) => map.set(String(p.id), normalizeProperty(p)));
+  listings.forEach((p) => map.set(String(p.id), normalizeProperty(p)));
+
+  const allListings = Array.from(map.values());
+
+  if (inquiries.length === 0) {
+    inquiries = loadLocalInquiries();
+  }
+
+  const pendingListings = allListings.filter((p) => p.status === 'pending_review' || !p.verified);
+  const activeListings = allListings.filter((p) => p.status === 'active' && p.verified);
+  const rejectedListings = allListings.filter((p) => p.status === 'rejected');
+  const totalViews = allListings.reduce((sum, p) => sum + (Number(p.views_count) || 0), 0);
+
+  return {
+    listings: allListings,
+    pendingListings,
+    activeListings,
+    rejectedListings,
+    inquiries,
+    stats: {
+      totalListings: allListings.length,
+      pendingCount: pendingListings.length,
+      activeCount: activeListings.length,
+      rejectedCount: rejectedListings.length,
+      totalViews,
+      totalInquiries: inquiries.length,
+    }
+  };
 }

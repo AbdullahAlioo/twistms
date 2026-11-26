@@ -8,6 +8,7 @@ import {
   updateInquiryStatus,
 } from '../lib/supabase';
 import ScrollReveal from '../components/common/ScrollReveal';
+import EditPropertyModal from '../components/common/EditPropertyModal';
 
 export default function SellerDashboard() {
   const { user, profile, currentPlan, selectPlan, signOut } = useAuth();
@@ -32,6 +33,7 @@ export default function SellerDashboard() {
   const [planMessage, setPlanMessage] = useState('');
   const [listingSearch, setListingSearch] = useState('');
   const [copiedId, setCopiedId] = useState(null);
+  const [editingProperty, setEditingProperty] = useState(null);
 
   async function loadDashboard() {
     setLoading(true);
@@ -385,17 +387,32 @@ export default function SellerDashboard() {
                           </td>
 
                           <td className="py-4 px-4">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold ${
-                                prop.plan === 'Premium'
-                                  ? 'bg-purple-100 text-purple-800'
-                                  : prop.plan === 'Paid'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {prop.plan} Plan
-                            </span>
+                            <div className="space-y-1">
+                              <span
+                                className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-mono font-bold ${
+                                  prop.plan === 'Premium'
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : prop.plan === 'Paid'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {prop.plan} Plan
+                              </span>
+                              <div>
+                                {prop.verified && prop.status === 'active' ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    Verified Live
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                    Pending Review
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </td>
 
                           <td className="py-4 px-4">
@@ -433,11 +450,18 @@ export default function SellerDashboard() {
 
                           <td className="py-4 px-6 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setEditingProperty(prop)}
+                                className="px-3 py-1.5 rounded-lg border border-[#B4B4B4] bg-[#F7F7F7] text-[11px] font-bold text-[#111111] hover:bg-[#B4B4B4]/20 transition-colors shadow-sm"
+                                title="Edit this listing"
+                              >
+                                ✏️ Edit
+                              </button>
                               <Link
                                 to={`/property/${prop.id}`}
                                 className="px-3 py-1.5 rounded-lg border border-[#2B2B2B]/20 text-[11px] font-bold text-[#111111] hover:bg-[#F2F2F2] transition-colors"
                               >
-                                View Live
+                                View
                               </Link>
                               <button
                                 onClick={() => handleCopyLink(prop.id)}
@@ -700,6 +724,16 @@ export default function SellerDashboard() {
           </div>
         </div>
       )}
+      {/* Property Edit Modal for Admin/Seller */}
+      <EditPropertyModal
+        isOpen={!!editingProperty}
+        property={editingProperty}
+        onClose={() => setEditingProperty(null)}
+        onSaved={() => {
+          setEditingProperty(null);
+          loadDashboard();
+        }}
+      />
     </div>
   );
 }

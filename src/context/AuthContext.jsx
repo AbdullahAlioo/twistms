@@ -15,6 +15,18 @@ const DEMO_SELLER = {
   created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
 };
 
+const DEMO_ADMIN = {
+  id: 'admin-101',
+  email: 'admin@twistms.com',
+  full_name: 'TwistMS Platform Administrator',
+  role: 'admin',
+  phone: '+1 (512) 555-0100',
+  agency_name: 'TwistMS Executive Review Desk',
+  current_plan: 'Premium',
+  avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=256&q=80',
+  created_at: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+};
+
 const LOCAL_USER_KEY = 'twistms_current_user_v2';
 
 export function AuthProvider({ children }) {
@@ -220,6 +232,26 @@ export function AuthProvider({ children }) {
     return { success: true };
   }
 
+  function loginAsAdmin() {
+    setUser(DEMO_ADMIN);
+    setProfile(DEMO_ADMIN);
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(DEMO_ADMIN));
+    return { success: true, user: DEMO_ADMIN };
+  }
+
+  function loginAsDemoSeller() {
+    setUser(DEMO_SELLER);
+    setProfile(DEMO_SELLER);
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(DEMO_SELLER));
+    return { success: true, user: DEMO_SELLER };
+  }
+
+  const isAdmin = Boolean(
+    profile?.role === 'admin' ||
+    user?.email === 'admin@twistms.com' ||
+    user?.id === 'admin-101'
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -227,11 +259,14 @@ export function AuthProvider({ children }) {
         profile: profile || user,
         loading,
         currentPlan: profile?.current_plan || user?.current_plan || 'Free',
+        isAdmin,
         signUp,
         signIn,
         signOut,
         selectPlan,
         updateProfile,
+        loginAsAdmin,
+        loginAsDemoSeller,
         isConfigured: isSupabaseConfigured,
       }}
     >

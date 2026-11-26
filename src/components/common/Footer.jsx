@@ -65,6 +65,8 @@ export default function Footer() {
               <li><Link to="/search" className="hover:text-[#B4B4B4] transition-colors">Commercial & Industrial Parks</Link></li>
               <li><Link to="/agents" className="hover:text-[#B4B4B4] transition-colors font-bold text-[#111111]">Find an Agent Directory →</Link></li>
               <li><Link to="/submit" className="hover:text-[#B4B4B4] transition-colors font-bold text-[#111111]">Submit Property Deed →</Link></li>
+              <li><Link to="/dashboard" className="hover:text-[#B4B4B4] transition-colors font-bold text-[#111111]">Seller Dashboard →</Link></li>
+              <li><Link to="/admin" className="hover:text-[#B4B4B4] transition-colors font-bold text-amber-700">Admin Verification Portal ⚙️ →</Link></li>
             </ul>
           </div>
 
